@@ -14,7 +14,7 @@ final class Record {
     }
     
     Currency getCurrency() {
-        return currency;
+        return source.getCurrency();
     }
 
     String getAmount() {
@@ -25,23 +25,26 @@ final class Record {
         return category;
     }
     
-    Record(LocalDate date, String desc, Currency currency, String amount,
-            String category) {
+    Statement getSource() {
+        return source;
+    }
+    
+    Record(LocalDate date, String desc, String amount,
+            String category, Statement source) {
         Objects.requireNonNull(date);
         Objects.requireNonNull(desc);
-        Objects.requireNonNull(currency);
         Objects.requireNonNull(amount);
         
         this.date = date;
         this.desc = desc;
-        this.currency = currency;
         this.amount = amount;
         this.category = category;
+        this.source = source;
     }
 
     private final LocalDate date;
     private final String desc;
     private final String category;
-    private final Currency currency;
     private final String amount;
+    private final Statement source;
 }

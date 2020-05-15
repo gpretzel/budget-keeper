@@ -9,13 +9,14 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVRecord;
 
 
 final class TdBankCcStatementCsv implements RecordSupplier {
     @Override
-    public List<Record> read(Path csvFilePath) throws IOException {
+    public Stream<Record> read(Path csvFilePath) throws IOException {
         List<Record> result = new ArrayList<>();
         try (Reader in = Files.newBufferedReader(csvFilePath)) {
             Iterable<CSVRecord> records = CSVFormat.RFC4180.withFirstRecordAsHeader().withHeader(
@@ -38,7 +39,7 @@ final class TdBankCcStatementCsv implements RecordSupplier {
             }
         }
         
-        return result;
+        return result.stream();
     }
     
     private enum Headers {

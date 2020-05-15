@@ -24,8 +24,11 @@ final class RecordCsvSerializer {
         String currency = formatField(record.getCurrency().getCurrencyCode());
         String amount = formatField(record.getAmount());
         String category = formatField(record.getCategory());
+        String statementId = formatField(record.getSource().getId());
+        String statementSystemId = formatField(record.getSource().getSystemId());
     
-        return String.join(",", date, desc, currency, amount, category);
+        return String.join(",", date, desc, currency, amount, category,
+                statementId, statementSystemId);
     }
     
     private String formatField(String value) {

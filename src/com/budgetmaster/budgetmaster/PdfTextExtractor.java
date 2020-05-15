@@ -2,6 +2,8 @@ package com.budgetmaster.budgetmaster;
 
 import java.nio.file.Path;
 import java.io.IOException;
+import java.lang.invoke.MethodHandles;
+import java.util.logging.Logger;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.encryption.AccessPermission;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -21,7 +23,7 @@ final class PdfTextExtractor {
 
             String pdfText = stripper.getText(document);
 
-            System.out.println(pdfText);
+            LOGGER.finest(pdfText);
 
             return pdfText;
         }
@@ -33,4 +35,7 @@ final class PdfTextExtractor {
     }
             
     private boolean sortByPosition;
+    
+    private static final Logger LOGGER = Logger.getLogger(
+            MethodHandles.lookup().lookupClass().getName());
 }

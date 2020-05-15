@@ -5,8 +5,8 @@ import java.util.Currency;
 
 final class RecordBuilder {
     Record create() {
-        return new Record(date, filterSting(desc), currency, filterAmount(),
-                filterSting(category));
+        return new Record(date, filterSting(desc), filterAmount(), filterSting(
+                category), source);
     }
     
     static RecordBuilder from(Record record) {
@@ -15,7 +15,7 @@ final class RecordBuilder {
                 .setDescription(record.getDescription())
                 .setDate(record.getDate())
                 .setCategory(record.getCategory())
-                .setCurrency(record.getCurrency());
+                .setSource(record.getSource());
     }
 
     LocalDate getDate() {
@@ -45,12 +45,12 @@ final class RecordBuilder {
         return this;
     }
     
-    Currency getCurrency() {
-        return currency;
+    Statement getSource() {
+        return source;
     }
     
-    RecordBuilder setCurrency(Currency v) {
-        currency = v;
+    RecordBuilder setSource(Statement v) {
+        source = v;
         return this;
     }
     
@@ -111,6 +111,6 @@ final class RecordBuilder {
     private LocalDate date;
     private String desc;
     private String category;
-    private Currency currency = Currency.getInstance("USD");
+    private Statement source;
     private String amount;
 }

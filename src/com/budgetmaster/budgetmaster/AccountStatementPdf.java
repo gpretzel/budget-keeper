@@ -14,7 +14,7 @@ import java.util.stream.Stream;
 
 abstract class AccountStatementPdf implements RecordSupplier {
     @Override
-    public List<Record> read(Path pdfFile) throws IOException {
+    public Stream<Record> read(Path pdfFile) throws IOException {
         PdfTextExtractor textExtractor = new PdfTextExtractor();
         adjustPdfTextExtractor(textExtractor);
         String pdfText = textExtractor.extractText(pdfFile);
@@ -22,7 +22,7 @@ abstract class AccountStatementPdf implements RecordSupplier {
         TextFrame textFrame = new TextFrame(pdfText);
         setPeriod(textFrame);
 
-        return parsePdfText(textFrame);
+        return parsePdfText(textFrame).stream();
     }
     
     protected List<Record> parseRecords(Stream<String> lines) {

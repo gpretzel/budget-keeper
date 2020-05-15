@@ -11,13 +11,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpression;
@@ -26,18 +22,11 @@ import javax.xml.xpath.XPathFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
-import org.xml.sax.SAXException;
 
 
 final class RecordMapperBuilder {
-    UnaryOperator<Record> createFromXml(Path xmlFile) throws IOException {
+    UnaryOperator<Record> createFromXml(Document doc) throws IOException {
         try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            factory.setNamespaceAware(true); // never forget this!
-            DocumentBuilder builder = factory.newDocumentBuilder();
-
-            Document doc = builder.parse(xmlFile.toFile());
-
             XPathFactory xpathfactory = XPathFactory.newInstance();
             xpath = xpathfactory.newXPath();
             globalMatchers = createRecordMatchers(doc);
@@ -51,18 +40,21 @@ final class RecordMapperBuilder {
             }
 
             return fold(passes, true);
-        } catch (ParserConfigurationException | SAXException
-                | XPathExpressionException ex) {
-            throw new RuntimeException(String.format(
-                    "Failed to process record mapping %s XML file", xmlFile), ex);
+        } catch (XPathExpressionException ex) {
+            // Should never happen at run-time.
+            throw new RuntimeException(ex);
         }
+    }
+    
+    UnaryOperator<Record> createFromXml(Path xmlFile) throws IOException {
+        return createFromXml(Util.readXml(xmlFile));
     }
 
     private Map<String, Predicate<Record>> createRecordMatchers(Document doc) throws
             XPathExpressionException {
         Map<String, Predicate<Record>> result = new HashMap<>();
 
-        NodeList nodes = queryNodes("//matcher[@id]", doc.getDocumentElement());
+        NodeList nodes = queryNodes("/*/matcher[@id]", doc.getDocumentElement());
         for (int i = 0; i < nodes.getLength(); i++) {
             Element el = (Element) nodes.item(i);
             result.put(el.getAttribute("id"), createRecordMatcher(el));
@@ -141,7 +133,7 @@ final class RecordMapperBuilder {
         List<UnaryOperator<Record>> actions = new ArrayList<>();
 
         NodeList nodes = queryNodes(
-                "set-category|negate-amount|discard|set-currency", actionEl);
+                "set-category|negate-amount|discard", actionEl);
         for (int i = 0; i < nodes.getLength(); i++) {
             Element el = (Element) nodes.item(i);
             if ("discard".equals(el.getNodeName())) {
@@ -153,12 +145,6 @@ final class RecordMapperBuilder {
             switch (el.getNodeName()) {
                 case "negate-amount":
                     actions.add(RecordFieldMapper.amountNegator());
-                    break;
-                case "set-currency":
-                    String currencyStr = el.getFirstChild().getNodeValue();
-                    Currency currency = Currency.getInstance(currencyStr);
-                    actions.add(new RecordFieldMapper((String) null,
-                            (rb, value) -> rb.setCurrency(currency)));
                     break;
                 case "set-category":
                     String value = el.getFirstChild().getNodeValue();
