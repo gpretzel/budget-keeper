@@ -27,20 +27,23 @@ public class Main implements Callable<Integer> {
 
     private static final Logger LOGGER = Logger.getLogger(
             MethodHandles.lookup().lookupClass().getName());
-    
+
     @Option(names = {"-c", "--config"}, description = "path to config XML file")
     private Path configXmlFile;
 
     @Option(names = {"-o", "--output"}, description = "path to output CSV file")
     private Path outputCsvFile;
-    
+
     @Option(names = {"-d", "--dry-run"}, description = "dry run")
     private boolean dryRun;
+
+    @Option(names = {"-a", "--fail-fast"}, description = "abort after the first encountered error")
+    private boolean failFast;
 
     @Parameters(paramLabel = "FILE",
             description = "one ore more statemnet files/directories to process")
     private Path[] statementPaths;
-    
+
     private static Path[] explodePaths(Path[] paths) throws IOException {
         List<Path> result = new ArrayList<>();
         for (Path path: paths) {
@@ -63,7 +66,7 @@ public class Main implements Callable<Integer> {
         int exitCode = new CommandLine(new Main()).execute(args);
         System.exit(exitCode);
     }
-    
+
     private Stream<Record> harvestStatement(Statement statement,
             UnaryOperator<Record> mapper, Path path) throws Exception {
         try {
@@ -76,7 +79,7 @@ public class Main implements Callable<Integer> {
             throw new RuntimeException(t);
         }
     }
-    
+
     @Override
     public Integer call() throws Exception {
         LOGGER.finer(String.format("Read [%s] config file", configXmlFile));
@@ -89,7 +92,7 @@ public class Main implements Callable<Integer> {
 
         Function<Path, Statement> statementCfg = rsfb.createFromXml(configXml);
         UnaryOperator<Record> recordMapper = rmb.createFromXml(configXml);
-        
+
         List<Stream<Record>> records = new ArrayList<>();
 
         int processed = 0;
@@ -119,21 +122,24 @@ public class Main implements Callable<Integer> {
                                 "Error harvesting [%s] input file: %s", path,
                                 ex.getMessage()));
                         ex.printStackTrace();
+                        if (failFast) {
+                            return 1;
+                        }
                     }
                 }
             }
-            
+
             if (outputCsvFile != null) {
                 new RecordCsvSerializer().saveToFile(records.stream().flatMap(
                         s -> s), outputCsvFile);
             }
-                
+
             return 0;
         } finally {
             int notProcessed = filteredStatementPaths.length - (processed
                     + failed + ignored);
             System.out.println(String.format(
-                    "Total input files count: %d; success: %d; failed: %d; unrecognized: %d; not processed: %d",
+                    "Total input files count: %d; success: %d; failed: %d; unrecognized: %d; skipped: %d",
                     filteredStatementPaths.length, processed, failed, ignored,
                     notProcessed));
         }

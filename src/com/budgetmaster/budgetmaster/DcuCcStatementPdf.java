@@ -1,10 +1,13 @@
 package com.budgetmaster.budgetmaster;
 
 import static com.budgetmaster.budgetmaster.Util.EOL;
+import java.lang.invoke.MethodHandles;
+import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -15,7 +18,7 @@ final class DcuCcStatementPdf extends AccountStatementPdf {
     protected void adjustPdfTextExtractor(PdfTextExtractor extractor) {
         extractor.setSortByPosition(false);
     }
-    
+
     @Override
     protected List<Record> parsePdfText(TextFrame text) {
         List<Record> result = new ArrayList<>();
@@ -23,46 +26,61 @@ final class DcuCcStatementPdf extends AccountStatementPdf {
         // Get the first page transactions table
         String rawTransactionsText = text.set(EOL + "Date Date Advances Credits" + EOL,
                 EOL + "*PERIODIC FINANCE CHARGE (*)" + EOL).getStrippedValue();
-        
+
         // In case transactions table is not split accross the pages
-        // trip unneeded trailing characters.
+        // strip unneeded trailing characters.
         String transactionsText = rawTransactionsText.split(EOL + "Fees" + EOL, 2)[0];
-        
-        result.addAll(parseTransactionTable(transactionsText));
 
         if (transactionsText.length() == rawTransactionsText.length()) {
-            // Transactions table continued on the second page 
+            // Transactions table continued on the second page
             // FIXME: What if transactions table is split in more than two chunks
             try {
-                transactionsText = text.set(EOL + "Date Date Advances Credits" + EOL,
+                String moreTransactionsText = text.set(EOL + "Date Date Advances Credits" + EOL,
                         EOL + "Fees" + EOL).getStrippedValue();
+                transactionsText = transactionsText + EOL + moreTransactionsText;
             } catch (TextFrameException ex) {
-                return result;
             }
-
-            result.addAll(parseTransactionTable(transactionsText));
         }
-        
+
+        result.addAll(parseTransactionTable(transactionsText));
+
+        paymentsChecksum.append(result.stream().filter((record) -> {
+            Matcher m = PAYMENT_TRANSACTION.matcher(record.getDescription());
+            return m.matches();
+        })).validate();
+        purchasesChecksum.append(result.stream().filter((record) -> {
+            Matcher m = PAYMENT_TRANSACTION.matcher(record.getDescription());
+            return !m.matches();
+        })).validate();
+
         return result;
     }
-    
+
     private List<Record> parseTransactionTable(String text) {
-        String lines[] = RECORD_SPLITTER.split(text);
-            
-        Stream recordStream = Stream.of(lines)
-                .filter((str) -> {
-                    Matcher m = TRANSACTION_HEADER.matcher(str);
-                    return m.matches();
-                });
-        
-        return parseRecords(recordStream);
+        String rawLines[] = RECORD_SPLITTER.split(text);
+
+        List<String> lines = new ArrayList<>();
+
+        for (String line: rawLines) {
+            Matcher m = TRANSACTION_HEADER.matcher(line);
+            if (m.matches()) {
+                lines.add(line);
+            } else if (!lines.isEmpty()) {
+                String prevLine = lines.get(lines.size() - 1);
+                int idx = prevLine.lastIndexOf(' ');
+                line = prevLine.substring(0, idx) + " " + line + prevLine.substring(idx);
+                lines.set(lines.size() - 1, line);
+            }
+        }
+
+        return parseRecords(lines.stream());
     }
 
     @Override
     protected void parseRecord(String str, RecordBuilder rb) {
         // 12/12 GULF OIL 91186030 SOMERVILLE MA 20.79
         String[] components = Util.splitAtWhitespace(str);
-        
+
         rb.setAmount(components[components.length - 1]);
         String desc = Stream.of(components)
                 .skip(1)
@@ -70,38 +88,87 @@ final class DcuCcStatementPdf extends AccountStatementPdf {
                 .collect(Collectors.joining(" "));
         rb.setDescription(desc);
     }
-    
+
     @Override
     protected String periodString(TextFrame text) {
+        text.set(EOL + "Starting Balance", EOL);
+
+        paymentsChecksum = createRecordChecksum(text, "Payments",
+                "Other Credits", MonetaryAmountNormalizer.negate());
+
         // Extract from
         // Statement Closing Date 01/10/18
         String result = text.set(EOL + "Statement Closing Date", EOL).getStrippedValue();
+
+        purchasesChecksum = createRecordChecksum(text, "Purchases",
+                null, new MonetaryAmountNormalizer());
+
         return result;
     }
-    
+
+    private static BalanceChecksum createRecordChecksum(TextFrame text, String main,
+            String other, MonetaryAmountNormalizer normalizer) {
+        final BigDecimal mainAmount = getChecksumValue(text, EOL + main,
+                normalizer);
+
+        LOGGER.finest(String.format("%s amount: [%s]", main, mainAmount));
+
+        final BigDecimal totalAmount;
+
+        if (other != null) {
+            final BigDecimal otherAmount = getChecksumValue(text, EOL + other,
+                    normalizer);
+            if (otherAmount.compareTo(BigDecimal.ZERO) != 0) {
+                LOGGER.finest(String.format("%s amount: [%s]", other, otherAmount));
+                totalAmount = mainAmount.add(otherAmount);
+            } else {
+                totalAmount = mainAmount;
+            }
+        } else {
+            totalAmount = mainAmount;
+        }
+
+        return new BalanceChecksum(totalAmount);
+    }
+
+    private static BigDecimal getChecksumValue(TextFrame text, String begin,
+            MonetaryAmountNormalizer norm) {
+        String checksumText = text.set(begin, EOL).getStrippedValue();
+        return new BigDecimal(norm.normalize(checksumText));
+    }
+
     @Override
     protected String periodStringSeparator() {
         return " to ";
     }
-    
+
     @Override
     protected DateTimeFormatter periodStringDateTimeFormatter() {
         return STATEMENT_PERIOD_DATE_FORMAT;
     }
-    
+
     @Override
     protected DateTimeFormatter recordDateTimeFormatter() {
         return TRANSACTION_DATE_FORMAT;
     }
-    
+
+    private BalanceChecksum paymentsChecksum;
+    private BalanceChecksum purchasesChecksum;
+
+    private static final Logger LOGGER = Logger.getLogger(
+            MethodHandles.lookup().lookupClass().getName());
+
     private final static DateTimeFormatter TRANSACTION_DATE_FORMAT = DateTimeFormatter.ofPattern(
             "MM/dd", Locale.US);
 
     private final static DateTimeFormatter STATEMENT_PERIOD_DATE_FORMAT = DateTimeFormatter.ofPattern(
             "MM/dd/yy", Locale.US);
-    
+
     private final static Pattern RECORD_SPLITTER = Pattern.compile("\\R");
-    
+
     private final static Pattern TRANSACTION_HEADER = Pattern.compile(
             "^\\d{2}/\\d{2}\\s+\\d{2}/\\d{2}.+$");
+
+    private final static Pattern PAYMENT_TRANSACTION = Pattern.compile(
+            "^.*\\b(PAYMENT-TRANSFER|PAYMENT-PAYOFF|CREDIT\\s+CARD\\s+CREDIT)\\b.*$");
 }

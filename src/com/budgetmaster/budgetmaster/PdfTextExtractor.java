@@ -8,8 +8,8 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.encryption.AccessPermission;
 import org.apache.pdfbox.text.PDFTextStripper;
 
-final class PdfTextExtractor {
-    
+public final class PdfTextExtractor {
+
     String extractText(Path pdfFile) throws IOException {
         try (PDDocument document = PDDocument.load(pdfFile.toFile())) {
             AccessPermission ap = document.getCurrentAccessPermission();
@@ -28,14 +28,14 @@ final class PdfTextExtractor {
             return pdfText;
         }
     }
-    
+
     PdfTextExtractor setSortByPosition(boolean v) {
         sortByPosition = v;
         return this;
     }
-            
+
     private boolean sortByPosition;
-    
+
     private static final Logger LOGGER = Logger.getLogger(
             MethodHandles.lookup().lookupClass().getName());
 }

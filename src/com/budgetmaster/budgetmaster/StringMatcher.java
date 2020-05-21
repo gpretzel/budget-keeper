@@ -11,18 +11,18 @@ class StringMatcher implements Predicate<Record> {
     StringMatcher(String regexp, Function <Record, String> fieldAccessor) {
         Objects.requireNonNull(regexp);
         Objects.requireNonNull(fieldAccessor);
-        
+
         this.regexp = Pattern.compile(regexp);
         this.fieldAccessor = fieldAccessor;
     }
-   
+
     @Override
     public boolean test(Record t) {
         String v = fieldAccessor.apply(t);
         Matcher m = regexp.matcher(v);
         return m.matches();
     }
-    
+
     private final Function <Record, String> fieldAccessor;
     private final Pattern regexp;
 }

@@ -15,30 +15,30 @@
 
   <matcher id="gas_gulfoil">
       <field name="Description" regexp="^GULF\s+OIL.*$"/>
-  </matcher>  
+  </matcher>
   <matcher id="gas_speedway">
       <field name="Description" regexp="^SPEEDWAY.*$"/>
   </matcher>
-  
+
   <pass>
     <action>
       <matcher ref="gas_gulfoil"/>
       <matcher ref="gas_speedway"/>
       <set-category>бензин</set-category>
     </action>
-    
+
     <action>
       <matcher>
         <field name="Description" regexp="^E-ZPASS.*$"/>
       </matcher>
       <set-category>цивик</set-category>
     </action>
-    
+
     <action>
       <matcher>
         <field name="Description" regexp="^PAYMENT\s+RECEIVED.*$"/>
       </matcher>
       <discard/>
-    </action>    
+    </action>
   </pass>
 </config>

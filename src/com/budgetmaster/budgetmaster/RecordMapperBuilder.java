@@ -45,7 +45,7 @@ final class RecordMapperBuilder {
             throw new RuntimeException(ex);
         }
     }
-    
+
     UnaryOperator<Record> createFromXml(Path xmlFile) throws IOException {
         return createFromXml(Util.readXml(xmlFile));
     }

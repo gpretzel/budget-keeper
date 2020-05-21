@@ -28,18 +28,18 @@ final class TextFrame {
 
         begin = newBegin + from.length();
         end = newEnd;
-        
+
         return this;
     }
-    
+
     String getValue() {
         return data.substring(begin, end);
     }
-    
+
     String getStrippedValue() {
         return getValue().strip();
     }
-    
+
     private final String data;
     private int begin;
     private int end;

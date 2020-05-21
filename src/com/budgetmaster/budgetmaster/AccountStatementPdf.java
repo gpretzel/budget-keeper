@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 
-abstract class AccountStatementPdf implements RecordSupplier {
+public abstract class AccountStatementPdf implements RecordSupplier {
     @Override
     public Stream<Record> read(Path pdfFile) throws IOException {
         PdfTextExtractor textExtractor = new PdfTextExtractor();
@@ -24,7 +24,7 @@ abstract class AccountStatementPdf implements RecordSupplier {
 
         return parsePdfText(textFrame).stream();
     }
-    
+
     protected List<Record> parseRecords(Stream<String> lines) {
         return lines
                 .map((str) -> str.replaceAll("[\\n\\r\\s]+", " "))
@@ -34,16 +34,16 @@ abstract class AccountStatementPdf implements RecordSupplier {
 
     private Record parseRecord(String str) {
         RecordBuilder rb = new RecordBuilder().strip();
-        
+
         String components[] = Util.splitAtWhitespace(str, 2);
-        
+
         rb.setDate(getRecordDate(components[0]));
-        
+
         parseRecord(components[1], rb);
-        
+
         return rb.create();
     }
-            
+
     private LocalDate getRecordDate(String str) {
         try {
             MonthDay md = MonthDay.parse(str, recordDateTimeFormatter());
@@ -52,7 +52,7 @@ abstract class AccountStatementPdf implements RecordSupplier {
             throw new IllegalArgumentException(ex);
         }
     }
-    
+
     private void setPeriod(TextFrame text) {
         String periodStr = periodString(text);
 
@@ -73,20 +73,20 @@ abstract class AccountStatementPdf implements RecordSupplier {
                     periodStr), ex);
         }
     }
-    
+
     protected void adjustPdfTextExtractor(PdfTextExtractor extractor) {
     }
-    
+
     protected abstract List<Record> parsePdfText(TextFrame text);
-    
+
     protected abstract void parseRecord(String str, RecordBuilder rb);
-    
+
     protected abstract String periodString(TextFrame text);
-    
+
     protected abstract String periodStringSeparator();
-    
+
     protected abstract DateTimeFormatter periodStringDateTimeFormatter();
-    
+
     protected abstract DateTimeFormatter recordDateTimeFormatter();
 
     private Year year;

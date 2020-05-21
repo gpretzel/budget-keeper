@@ -10,7 +10,7 @@ interface Statement extends ThrowingSupplier<Stream<Record>> {
     String getId();
     String getSystemId();
     Currency getCurrency();
-    
+
     static Statement fromStatementFile(String id, Path path, Currency currency,
             RecordSupplier rs) {
         return new Statement() {

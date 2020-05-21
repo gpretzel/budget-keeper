@@ -22,7 +22,7 @@ final class TdBankCcStatementCsv implements RecordSupplier {
             Iterable<CSVRecord> records = CSVFormat.RFC4180.withFirstRecordAsHeader().withHeader(
                     Headers.class).parse(in);
             for (CSVRecord record : records) {
-                final String dateStr = record.get(Headers.Date);                
+                final String dateStr = record.get(Headers.Date);
                 try {
                     final LocalDate date = LocalDate.parse(dateStr,
                             DATE_FORMATTER);
@@ -34,17 +34,17 @@ final class TdBankCcStatementCsv implements RecordSupplier {
                             .setCategory(record.get(Headers.MerchantCategoryDescription))
                             .create());
                 } catch (DateTimeParseException ex) {
-                    
+                    throw new RuntimeException(ex);
                 }
             }
         }
-        
+
         return result.stream();
     }
-    
+
     private enum Headers {
-        Date, 
-        ActivityType, 
+        Date,
+        ActivityType,
         MerchantName,
         MerchantCategoryDescription,
         Amount,

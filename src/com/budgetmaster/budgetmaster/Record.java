@@ -4,7 +4,7 @@ import java.time.LocalDate;
 import java.util.Currency;
 import java.util.Objects;
 
-final class Record {
+public final class Record {
     LocalDate getDate() {
         return date;
     }
@@ -12,29 +12,36 @@ final class Record {
     String getDescription() {
         return desc;
     }
-    
+
     Currency getCurrency() {
-        return source.getCurrency();
+        if (source != null) {
+            return source.getCurrency();
+        }
+        return null;
     }
 
     String getAmount() {
         return amount;
     }
-    
+
     String getCategory() {
         return category;
     }
-    
+
     Statement getSource() {
         return source;
     }
-    
+
+    boolean isNegative() {
+        return (amount.stripLeading().charAt(0) == '-');
+    }
+
     Record(LocalDate date, String desc, String amount,
             String category, Statement source) {
         Objects.requireNonNull(date);
         Objects.requireNonNull(desc);
         Objects.requireNonNull(amount);
-        
+
         this.date = date;
         this.desc = desc;
         this.amount = amount;

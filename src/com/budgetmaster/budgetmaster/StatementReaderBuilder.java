@@ -53,7 +53,7 @@ public class StatementReaderBuilder {
             throw new RuntimeException(ex);
         }
     }
-    
+
     private static RecordSupplier createRecordSupplier(String clazz) {
         try {
             return (RecordSupplier) Class.forName(clazz).getDeclaredConstructor().newInstance();
@@ -68,32 +68,32 @@ public class StatementReaderBuilder {
 
     private Function<Path, Statement> createRecordSupplier(Element parserEl)
             throws XPathExpressionException {
-        
+
         List<Predicate<Path>> matchers = new ArrayList<>();
-        
+
         String id = parserEl.getAttribute("id");
         String clazz = parserEl.getAttribute("class");
-        
+
         final Currency currency;
         if (parserEl.hasAttribute("currency")) {
             currency = Currency.getInstance(parserEl.getAttribute("currency"));
         } else {
             currency = Currency.getInstance("USD");
         }
-        
+
         NodeList nodes = queryNodes("path-matcher", parserEl);
         for (int i = 0; i < nodes.getLength(); i++) {
             Element matcherEl = (Element)nodes.item(i);
-            
+
             String value = matcherEl.getFirstChild().getNodeValue();
-            
+
             PathMatcher pm = FileSystems.getDefault().getPathMatcher(value);
-            
+
             matchers.add(pm::matches);
         }
-        
+
         RecordSupplier rs = createRecordSupplier(clazz);
-        
+
         return (path) -> {
             for (Predicate<Path> m: matchers) {
                if (m.test(path)) {
@@ -103,17 +103,17 @@ public class StatementReaderBuilder {
             return null;
         };
     }
-    
+
     Function<Path, Statement> createFromXml(Path xmlFile)
             throws IOException {
         return createFromXml(Util.readXml(xmlFile));
     }
-    
+
     private NodeList queryNodes(String xpathExpr, Element root) throws
             XPathExpressionException {
         XPathExpression expr = xpath.compile(xpathExpr);
         return (NodeList) expr.evaluate(root, XPathConstants.NODESET);
     }
-    
+
     private XPath xpath;
 }

@@ -24,13 +24,13 @@ class RecordFieldMapper implements UnaryOperator<Record> {
         this.value = value;
         this.fieldAccessor = fieldAccessor;
     }
-    
+
     static RecordFieldMapper amountNegator() {
         return new RecordFieldMapper((String)null, (rb, amount) -> {
             rb.negateAmount();
         });
     }
-    
+
     @Override
     public Record apply(Record r) {
         RecordBuilder rb = RecordBuilder.from(r);
