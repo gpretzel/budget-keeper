@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+  <parser class="com.budgetmaster.budgetmaster.PayPalStatementCsv" id="PayPal statement">
+    <path-matcher>glob:**/*.csv</path-matcher>
+  </parser>
+
+  <pass>
+    <action>
+      <matcher>
+        <field name="Category" regexp="\bPayment$"/>
+      </matcher>
+      <negate-amount/>
+    </action>
+    
+    <discard-unmatched/>
+  </pass>
+
+</config>

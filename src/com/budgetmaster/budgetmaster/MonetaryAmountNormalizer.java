@@ -1,5 +1,7 @@
 package com.budgetmaster.budgetmaster;
 
+import java.math.BigDecimal;
+
 
 public class MonetaryAmountNormalizer {
     public String normalize(String value) {
@@ -8,16 +10,13 @@ public class MonetaryAmountNormalizer {
         if (sepIdx > 0) {
             result = result.substring(0, sepIdx) + result.substring(sepIdx + 1);
         }
-
+        
+        BigDecimal number = new BigDecimal(result).stripTrailingZeros();
         if (negate) {
-            if (result.charAt(0) == '-') {
-                result = result.substring(1);
-            } else {
-                result = "-" + result;
-            }
+            number = number.negate();
         }
 
-        return result;
+        return number.toPlainString();
     }
 
     public static MonetaryAmountNormalizer negate(boolean v) {

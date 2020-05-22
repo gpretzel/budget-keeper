@@ -5,7 +5,6 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Currency;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -13,6 +12,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
@@ -48,6 +48,11 @@ final class RecordMapperBuilder {
 
     UnaryOperator<Record> createFromXml(Path xmlFile) throws IOException {
         return createFromXml(Util.readXml(xmlFile));
+    }
+    
+    RecordMapperBuilder setPayPalRecordMapperSupplier(Supplier<UnaryOperator<Record>> v) {
+        payPalRecordMapperSupplier = v;
+        return this;
     }
 
     private Map<String, Predicate<Record>> createRecordMatchers(Document doc) throws
@@ -125,7 +130,20 @@ final class RecordMapperBuilder {
             }
         }
 
+        if (queryNodes("discard-unmatched", root).getLength() != 0) {
+            actions.add(DISCARD_ACTION);
+        }
+
         return fold(actions, false);
+    }
+
+    private static UnaryOperator<Record> loggable(UnaryOperator<Record> what,
+            String msg) {
+        return LoggingRecordMapper.of(what, msg);
+    }
+
+    private static Predicate<Record> loggable(Predicate<Record> what, String msg) {
+        return LoggingRecordMatcher.of(what, msg);
     }
 
     private UnaryOperator<Record> createRecordMapper(Element actionEl) throws
@@ -133,27 +151,44 @@ final class RecordMapperBuilder {
         List<UnaryOperator<Record>> actions = new ArrayList<>();
 
         NodeList nodes = queryNodes(
-                "set-category|negate-amount|discard", actionEl);
+                "set-category|set-description|negate-amount|discard|merge-with-paypal", actionEl);
         for (int i = 0; i < nodes.getLength(); i++) {
             Element el = (Element) nodes.item(i);
-            if ("discard".equals(el.getNodeName())) {
-                actions.clear();
-                actions.add((record) -> null);
-                break;
-            }
-
             switch (el.getNodeName()) {
+                case "discard":
+                    actions.clear();
+                    actions.add(DISCARD_ACTION);
+                    i = nodes.getLength();
+                    break;
                 case "negate-amount":
-                    actions.add(RecordFieldMapper.amountNegator());
+                    actions.add(loggable(RecordFieldMapper.amountNegator(),
+                            "Negate amount of"));
                     break;
                 case "set-category":
                     String value = el.getFirstChild().getNodeValue();
-                    actions.add(new RecordFieldMapper(value,
-                            RecordBuilder::setCategory));
+                    actions.add(loggable(new RecordFieldMapper(value,
+                            RecordBuilder::setCategory), String.format(
+                            "Set category to [%s] of", value)));
+                    break;
+                case "set-description":
+                    value = el.getFirstChild().getNodeValue();
+                    actions.add(loggable(new RecordFieldMapper(value,
+                            RecordBuilder::setDescription), String.format(
+                            "Set description to [%s] of", value)));
+                    break;
+                case "merge-with-paypal":
+                    if (payPalRecordMapperSupplier != null) {
+                        actions.add(payPalRecordMapperSupplier.get());
+                    }
                     break;
                 default:
                     break;
             }
+        }
+        
+        if (nodes.getLength() == 0) {
+            // Just keep the record
+            actions.add(IDENTITY_ACTION);
         }
 
         return fold(actions, true);
@@ -169,7 +204,17 @@ final class RecordMapperBuilder {
             Function<Record, String> fieldAccessor = FIELD_ACCESSORS.get(fieldName);
             String regexp = fieldEl.getAttribute("regexp");
 
-            Predicate<Record> pred = new StringMatcher(regexp, fieldAccessor);
+            Predicate<Record> pred = loggable(new StringMatcher(regexp,
+                    fieldAccessor), String.format("Regexp [%s] applied to %s",
+                    regexp, fieldName.toLowerCase()));
+            predicates.add(pred);
+        }
+
+        nodes = queryNodes("mapper[@ref]", matcherEl);
+        for (int i = 0; i < nodes.getLength(); i++) {
+            Element nestedMatcherEl = (Element)nodes.item(i);
+            Predicate<Record> pred = globalMatchers.get(
+                    nestedMatcherEl.getAttribute("ref"));
             predicates.add(pred);
         }
 
@@ -185,7 +230,18 @@ final class RecordMapperBuilder {
 
             boolean inclusive = "period-inclusive".equals(periodEl.getNodeName());
 
-            Predicate<Record> pred = new DateRangeMatcher(beginDate, endDate, inclusive);
+            final String openBraket, closeBraket;
+            if (inclusive) {
+                openBraket = "[";
+                closeBraket = "]";
+            } else {
+                openBraket = "(";
+                closeBraket = ")";
+            }
+
+            Predicate<Record> pred = loggable(new DateRangeMatcher(beginDate,
+                    endDate, inclusive), String.format("Date range %s%s-%s%s",
+                    openBraket, begin, end, closeBraket));
             predicates.add(pred);
         }
 
@@ -206,14 +262,22 @@ final class RecordMapperBuilder {
 
     private XPath xpath;
     private Map<String, Predicate<Record>> globalMatchers;
+    private Supplier<UnaryOperator<Record>> payPalRecordMapperSupplier;
 
     private final static Map<String, Function<Record, String>> FIELD_ACCESSORS = Map.of(
             "description", Record::getDescription,
-            "currency", (record) -> record.getCurrency().getCurrencyCode(),
+            "currency", Record::getCurrencyCode,
             "amount", Record::getAmount,
-            "category", Record::getCategory
+            "category", Record::getCategory,
+            "statement-id", (record) -> record.getSource().getId()
     );
 
     private final static DateTimeFormatter PERIOD_DATE_FORMAT = DateTimeFormatter.ofPattern(
             "dd/MM/yy", Locale.US);
+
+    private final static UnaryOperator<Record> DISCARD_ACTION = LoggingRecordMapper.of(
+            (record) -> null, "Discard");
+    
+    private final static UnaryOperator<Record> IDENTITY_ACTION = LoggingRecordMapper.of(
+            (record) -> RecordBuilder.from(record).create(), "Identity");
 }

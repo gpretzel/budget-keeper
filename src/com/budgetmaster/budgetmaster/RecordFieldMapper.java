@@ -9,7 +9,6 @@ import java.util.function.UnaryOperator;
 class RecordFieldMapper implements UnaryOperator<Record> {
     RecordFieldMapper(String value,
             BiConsumer<RecordBuilder, String> fieldAccessor) {
-        Objects.requireNonNull(value);
         Objects.requireNonNull(fieldAccessor);
 
         this.value = (record) -> value;

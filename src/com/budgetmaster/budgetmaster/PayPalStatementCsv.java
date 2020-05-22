@@ -5,14 +5,15 @@ import java.util.Map;
 import org.apache.commons.csv.CSVFormat;
 
 
-final class TdBankCcStatementCsv extends AccountStatementCsv {
+final class PayPalStatementCsv extends AccountStatementCsv {
     @Override
     protected Map<RecordBuilder.Setter, Enum<?>> fieldMapper() {
         return Map.of(
                 RecordBuilder.Setter.Amount, Headers.Amount, 
                 RecordBuilder.Setter.Date, Headers.Date,
-                RecordBuilder.Setter.Description, Headers.MerchantName,
-                RecordBuilder.Setter.Category, Headers.MerchantCategoryDescription
+                RecordBuilder.Setter.Currency, Headers.Currency,
+                RecordBuilder.Setter.Description, Headers.Name,
+                RecordBuilder.Setter.Category, Headers.Type
         );
     }
     
@@ -25,16 +26,18 @@ final class TdBankCcStatementCsv extends AccountStatementCsv {
     protected CSVFormat initParser() {
         return CSVFormat.RFC4180.withFirstRecordAsHeader().withHeader(Headers.class);
     }
-
+    
     private enum Headers {
         Date,
-        ActivityType,
-        MerchantName,
-        MerchantCategoryDescription,
-        Amount,
-        Rewards
+        Time,
+        TimeZone,
+        Name,
+        Type,
+        Status,
+        Currency,
+        Amount
     };
 
     private final static DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern(
-            "yyyy-MM-dd");
+            "MM/dd/yyyy");
 }

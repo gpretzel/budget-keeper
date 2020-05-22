@@ -7,6 +7,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Predicate;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -44,14 +45,9 @@ final class DcuCcStatementPdf extends AccountStatementPdf {
 
         result.addAll(parseTransactionTable(transactionsText));
 
-        paymentsChecksum.append(result.stream().filter((record) -> {
-            Matcher m = PAYMENT_TRANSACTION.matcher(record.getDescription());
-            return m.matches();
-        })).validate();
-        purchasesChecksum.append(result.stream().filter((record) -> {
-            Matcher m = PAYMENT_TRANSACTION.matcher(record.getDescription());
-            return !m.matches();
-        })).validate();
+        paymentsChecksum.append(result.stream().filter(Record::isNegative)).validate();
+        purchasesChecksum.append(result.stream().filter(Predicate.not(
+                Record::isNegative))).validate();
 
         return result;
     }
@@ -87,6 +83,10 @@ final class DcuCcStatementPdf extends AccountStatementPdf {
                 .limit(components.length - 2)
                 .collect(Collectors.joining(" "));
         rb.setDescription(desc);
+        
+        if (PAYMENT_TRANSACTION.matcher(desc).matches()) {
+            rb.negateAmount();
+        }
     }
 
     @Override
@@ -94,7 +94,7 @@ final class DcuCcStatementPdf extends AccountStatementPdf {
         text.set(EOL + "Starting Balance", EOL);
 
         paymentsChecksum = createRecordChecksum(text, "Payments",
-                "Other Credits", MonetaryAmountNormalizer.negate());
+                "Other Credits", new MonetaryAmountNormalizer());
 
         // Extract from
         // Statement Closing Date 01/10/18

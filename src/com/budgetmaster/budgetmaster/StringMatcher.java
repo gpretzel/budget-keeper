@@ -19,8 +19,11 @@ class StringMatcher implements Predicate<Record> {
     @Override
     public boolean test(Record t) {
         String v = fieldAccessor.apply(t);
+        if (v == null) {
+            return false;
+        }
         Matcher m = regexp.matcher(v);
-        return m.matches();
+        return m.find();
     }
 
     private final Function <Record, String> fieldAccessor;

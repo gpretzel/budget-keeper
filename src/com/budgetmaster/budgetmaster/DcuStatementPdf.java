@@ -34,13 +34,13 @@ final class DcuStatementPdf extends AccountStatementPdf {
                     beginBalance = BigDecimal.ZERO;
                 } else {
                     beginBalance = new BigDecimal(
-                        new MonetaryAmountNormalizer().normalize(beginBalanceStr));
+                        MonetaryAmountNormalizer.negate().normalize(beginBalanceStr));
                 }
 
                 accountText = text.set(EOL, "NEW BALANCE").getStrippedValue();
 
                 final BigDecimal endBalance = new BigDecimal(
-                        new MonetaryAmountNormalizer().normalize(text.set(
+                        MonetaryAmountNormalizer.negate().normalize(text.set(
                                 "NEW BALANCE", EOL).getStrippedValue()));
 
                 accountChecksum = new BalanceChecksum(endBalance.subtract(
@@ -73,7 +73,7 @@ final class DcuStatementPdf extends AccountStatementPdf {
         // HR batch credits   VisaCashBack              180110 9.06 7,243.79
         String[] components = Util.splitAtWhitespace(str);
 
-        rb.setAmount(components[components.length - 2]);
+        rb.negateAmount().setAmount(components[components.length - 2]);
         String desc = Stream.of(components)
                 .limit(components.length - 2)
                 .collect(Collectors.joining(" "));

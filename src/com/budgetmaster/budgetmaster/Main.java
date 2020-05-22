@@ -1,5 +1,6 @@
 package com.budgetmaster.budgetmaster;
 
+import com.budgetmaster.budgetmaster.Functional.ThrowingSupplier;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.nio.file.Files;
@@ -12,6 +13,7 @@ import java.util.function.Function;
 import java.util.function.UnaryOperator;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.w3c.dom.Document;
 import picocli.CommandLine;
@@ -36,6 +38,9 @@ public class Main implements Callable<Integer> {
 
     @Option(names = {"-d", "--dry-run"}, description = "dry run")
     private boolean dryRun;
+    
+    @Option(names = {"-p", "--paypal"}, description = "pull in data from preprocessed PayPal csv statemenet")
+    private Path payPalCsv;
 
     @Option(names = {"-a", "--fail-fast"}, description = "abort after the first encountered error")
     private boolean failFast;
@@ -67,11 +72,13 @@ public class Main implements Callable<Integer> {
         System.exit(exitCode);
     }
 
-    private Stream<Record> harvestStatement(Statement statement,
+    private List<Record> harvestStatement(Statement statement,
             UnaryOperator<Record> mapper, Path path) throws Exception {
         try {
             Stream<Record> records = statement.get();
-            return records.map(mapper).filter(Objects::nonNull);
+            return records
+                    .map(mapper)
+                    .collect(Collectors.toList());
         } catch (Throwable t) {
             if (t instanceof Exception) {
                 throw (Exception)t;
@@ -87,13 +94,22 @@ public class Main implements Callable<Integer> {
 
         StatementReaderBuilder rsfb = new StatementReaderBuilder();
         RecordMapperBuilder rmb = new RecordMapperBuilder();
+        if (payPalCsv != null) {
+            rmb.setPayPalRecordMapperSupplier(ThrowingSupplier.toSupplier(
+                    () -> {
+                        if (dryRun) {
+                            return (r) -> r;
+                        }
+                        return PayPalRecordMapper.createFromCvsFile(payPalCsv);
+                    }));
+        }
 
         Path[] filteredStatementPaths = explodePaths(statementPaths);
 
         Function<Path, Statement> statementCfg = rsfb.createFromXml(configXml);
         UnaryOperator<Record> recordMapper = rmb.createFromXml(configXml);
 
-        List<Stream<Record>> records = new ArrayList<>();
+        List<List<Record>> records = new ArrayList<>();
 
         int processed = 0;
         int failed = 0;
@@ -128,20 +144,27 @@ public class Main implements Callable<Integer> {
                     }
                 }
             }
-
+            
             if (outputCsvFile != null) {
-                new RecordCsvSerializer().saveToFile(records.stream().flatMap(
-                        s -> s), outputCsvFile);
+                RecordsSerializer.csv().withCsvHeader().saveToFile(records.stream().flatMap(
+                        List::stream).filter(Objects::nonNull), outputCsvFile);
             }
 
             return 0;
         } finally {
-            int notProcessed = filteredStatementPaths.length - (processed
+            final int notProcessed = filteredStatementPaths.length - (processed
                     + failed + ignored);
             System.out.println(String.format(
                     "Total input files count: %d; success: %d; failed: %d; unrecognized: %d; skipped: %d",
                     filteredStatementPaths.length, processed, failed, ignored,
                     notProcessed));
+            final long totalRecords = records.stream().flatMap(List::stream).count();
+            final long discardedRecords = records.stream().flatMap(List::stream).filter(
+                    Objects::isNull).count();
+            System.out.println(String.format(
+                    "Total records harvested: %d; kept: %d; discarded: %d",
+                    totalRecords, totalRecords - discardedRecords,
+                    discardedRecords));
         }
     }
 }

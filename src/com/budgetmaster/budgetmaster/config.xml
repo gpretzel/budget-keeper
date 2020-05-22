@@ -1,44 +1,269 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <config>
-  <parser class="com.budgetmaster.budgetmaster.DcuStatementPdf" id="DCU Bank account statement">
+  <parser class="com.budgetmaster.budgetmaster.DcuStatementPdf" id="DCU Bank account statement" currency="USD">
     <path-matcher>glob:**/stmt_????????.pdf</path-matcher>
   </parser>
-  <parser class="com.budgetmaster.budgetmaster.DcuCcStatementPdf" id="DCU credit card statement">
+  <parser class="com.budgetmaster.budgetmaster.DcuCcStatementPdf" id="DCU credit card statement" currency="USD">
     <path-matcher>glob:**/dcu_stmt_??????.pdf</path-matcher>
   </parser>
-  <parser class="com.budgetmaster.budgetmaster.TdBankCcStatementCsv" id="TD Bank credit card statement">
+  <parser class="com.budgetmaster.budgetmaster.TdBankCcStatementCsv" id="TD Bank credit card statement" currency="USD">
     <path-matcher>glob:**/transactions_????-??-??.csv</path-matcher>
   </parser>
-  <parser class="com.budgetmaster.budgetmaster.TdBankStatementPdf" id="TD Bank account statement">
+  <parser class="com.budgetmaster.budgetmaster.TdBankStatementPdf" id="TD Bank account statement" currency="USD">
     <path-matcher>glob:**/View PDF Statement_????-??-??.pdf</path-matcher>
   </parser>
 
-  <matcher id="gas_gulfoil">
-      <field name="Description" regexp="^GULF\s+OIL.*$"/>
+  <matcher id="DCU_CC">
+      <field name="Statement-id" regexp="DCU credit card statement"/>
   </matcher>
-  <matcher id="gas_speedway">
-      <field name="Description" regexp="^SPEEDWAY.*$"/>
+
+  <matcher id="TD_CC">
+      <field name="Statement-id" regexp="TD Bank credit card statement"/>
+  </matcher>
+  
+  <matcher id="TD">
+      <field name="Statement-id" regexp="TD Bank account statement"/>
+  </matcher>
+  
+  <matcher id="DCU">
+      <field name="Statement-id" regexp="DCU Bank account statement"/>
   </matcher>
 
   <pass>
     <action>
-      <matcher ref="gas_gulfoil"/>
-      <matcher ref="gas_speedway"/>
+      <matcher>
+        <field name="Description" regexp="\bPAYPAL\b"/>
+      </matcher>
+      <merge-with-paypal/>
+      <set-category>paypal</set-category>
+    </action>
+  </pass>
+
+  <pass>
+    <action>
+      <matcher>
+        <field name="Description" regexp="^GULF\s+OIL\b"/>
+      </matcher>
+      <matcher>
+        <field name="Description" regexp="^SPEEDWAY\b"/>
+      </matcher>
+      <matcher>
+        <field name="Description" regexp="^SHELL OIL\b"/>
+      </matcher>
+      <matcher>
+        <matcher ref="TD_CC"/>
+        <field name="Category" regexp="^GAS$"/>
+      </matcher>
       <set-category>бензин</set-category>
+    </action>
+    
+    <action>
+      <matcher>
+        <field name="Description" regexp="^David Aitcheson$"/>
+        <field name="Category" regexp="^paypal$"/>
+      </matcher>
+      <set-category>аренда и коммуналка</set-category>
     </action>
 
     <action>
       <matcher>
-        <field name="Description" regexp="^E-ZPASS.*$"/>
+        <field name="Description" regexp="^E-ZPASS\b"/>
       </matcher>
       <set-category>цивик</set-category>
     </action>
+    
+    <action>
+      <matcher>
+        <matcher ref="DCU"/>
+        <field name="Description" regexp="^PAYMENT SHR TRANSFER FROM/TO 142$"/>
+      </matcher>
+      <set-category>цивик</set-category>
+      <set-description>Кредит за цивик</set-description>
+    </action>
 
     <action>
       <matcher>
-        <field name="Description" regexp="^PAYMENT\s+RECEIVED.*$"/>
+        <field name="Description" regexp="\bLIBERTY MUTUAL\b"/>
+      </matcher>
+      <set-category>цивик</set-category>
+      <set-description>Страховка</set-description>
+    </action>
+
+    <action>
+      <matcher>
+        <field name="Description" regexp="\b(STAR MARKET|TRADER JOE'S|STOP &amp; SHOP|A RUSSO &amp; SONS|ARAX MARKET|NEW DEAL FISH MARKET)\b"/>
+      </matcher>
+      <set-category>еда в магазине</set-category>
+    </action>
+
+    <action>
+      <matcher>
+        <field name="Description" regexp="\bUBER|MBTA|LYFT|Lyft|Uber\b"/>
+      </matcher>
+      <set-category>такси</set-category>
+    </action>
+
+    <action>
+      <matcher>
+        <field name="Description" regexp="^THAMES STREET IYAC\b"/>
+      </matcher>
+      <set-category>алкоголь</set-category>
+      <set-description>Попил пиво после гонок в Ньюпорте</set-description>
+    </action>
+    
+    <action>
+      <matcher>
+        <field name="Description" regexp="^MARATHON SPORTS\b"/>
+      </matcher>
+      <set-category>спорт</set-category>
+    </action>
+    
+    <action>
+      <matcher>
+        <field name="Description" regexp="\bWINE\b"/>
+      </matcher>
+      <set-category>алкоголь</set-category>
+    </action>
+
+    <action>
+      <matcher>
+        <field name="Description" regexp="^VZWRLSS\*APOCC VISN 800-922-0204 FL$"/>
+      </matcher>
+      <matcher>
+        <field name="Description" regexp="^VESTA \*T-MOBILE 888-278-3397 OR$"/>
+      </matcher>
+      <set-category>мобилка</set-category>
+    </action>
+
+    <action>
+      <matcher>
+        <field name="Description" regexp="^CCI NETWORK DRIVE\b"/>
+      </matcher>
+      <set-category>покушал</set-category>
+      <set-description>В столовке на работе</set-description>
+    </action>
+
+    <action>
+      <matcher>
+        <field name="Description" regexp="^SQ *FORTISSIMO COF SOMERVILLE MA$"/>
+      </matcher>
+      <set-category>покушал</set-category>
+      <set-description>Фортиссимо в Сомервиле</set-description>
+    </action>
+    
+    <action>
+      <matcher>
+        <field name="Description" regexp="^SUBWAY\b"/>
+      </matcher>
+      <set-category>покушал</set-category>
+      <set-description>SUBWAY</set-description>
+    </action>
+
+    <!-- Subscriptions -->
+    <action>
+      <matcher>
+        <field name="Description" regexp="\bSpotify USA Inc\b"/>
+      </matcher>
+      <set-category>подписка</set-category>
+      <set-description>Spotify</set-description>
+    </action>
+
+    <action>
+      <matcher>
+        <field name="Description" regexp="^AMAZON PRIME AMZN.COM/BILLWA$"/>
+      </matcher>
+      <set-category>подписка</set-category>
+      <set-description>За Амазон</set-description>
+    </action>
+
+    <!-- Discard these transactions -->
+    <action>
+      <matcher>
+        <matcher ref="TD_CC"/>
+        <field name="Description" regexp="^PAYMENT\s+RECEIVED\b"/>
+      </matcher>
+      <matcher>
+        <matcher ref="DCU_CC"/>
+        <field name="Description" regexp="^(PAYMENT-PAYOFF|LOAN PAYMENT-TRANSFER)\b"/>
+      </matcher>
+      <matcher>
+        <!-- Pay balance of TD CC from TD Bank checking account -->
+        <matcher ref="TD"/>
+        <field name="Description" regexp="^eTransfer Debit, Online Xfer Transfer to CC 4839505455423233$"/>
+      </matcher>
+      <matcher>
+        <!-- Transfer between saving & checking accounts -->
+        <matcher ref="DCU"/>
+        <field name="Description" regexp="^TRANSFER FROM/TO [2|1]\b"/>
+      </matcher>
+      <matcher>
+        <!-- Pay balance of DCU CC from DCU checking account -->
+        <matcher ref="DCU"/>
+        <field name="Description" regexp="^PAYMENT SHR TRANSFER FROM/TO 141$"/>
       </matcher>
       <discard/>
     </action>
+    
+    <action>
+      <matcher>
+        <matcher ref="TD"/>
+        <field name="Description" regexp="\bORACLE AMERICA SALARY\b"/>
+      </matcher>
+      <set-category>доход</set-category>
+      <set-description>Зарплата</set-description>
+    </action>
+
+    <action>
+      <matcher>
+        <matcher ref="DCU"/>
+        <field name="Description" regexp="^DIVIDEND$"/>
+      </matcher>
+      <set-category>доход</set-category>
+      <set-description>Проценты по сберегательному счету DCU</set-description>
+    </action>
+    
+    <action>
+      <matcher>
+        <field name="Description" regexp="^(WEST MARINE|INTENSITYSAILS|NAUTOS-USA LLC|Vela Sailing Supply|West Coast Sailing|Discount Marine Supplies)\b"/>
+      </matcher>
+      <set-category>яхтинг</set-category>
+    </action>
+    
+    <action>
+      <matcher>
+        <field name="Description" regexp="^David Kahn$"/>
+        <field name="Category" regexp="^paypal$"/>
+      </matcher>
+      <set-category>яхтинг</set-category>
+      <set-description>Платил за лазер #188122 David Kahn</set-description>
+    </action>
+    
+    <action>
+      <matcher>
+        <field name="Description" regexp="^Newport Laser Fleet, Inc.$"/>
+        <field name="Category" regexp="^paypal$"/>
+      </matcher>
+      <set-category>яхтинг</set-category>
+      <set-description>Гонки в Ньюпорте</set-description>
+    </action>
+    
+    <action>
+      <matcher>
+        <field name="Description" regexp="^REGATTA NETWORK$\b"/>
+      </matcher>
+      <set-category>яхтинг</set-category>
+      <set-description>За регату (не помню какую)</set-description>
+    </action>
+    
+    <action>
+      <matcher>
+        <field name="Description" regexp="\bTHE UPS STORE\b"/>
+      </matcher>
+      <set-category>всякое</set-category>
+      <set-description>Что-то делал в UPS</set-description>
+    </action>
+    
+<!--    <discard-unmatched/> -->
   </pass>
+
 </config>

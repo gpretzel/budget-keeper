@@ -1,6 +1,5 @@
 package com.budgetmaster.budgetmaster;
 
-import com.budgetmaster.budgetmaster.Functional.ThrowingSupplier;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.FileSystems;
@@ -9,11 +8,8 @@ import java.nio.file.PathMatcher;
 import java.util.ArrayList;
 import java.util.Currency;
 import java.util.List;
-import java.util.Locale;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
-import java.util.stream.Stream;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpression;
@@ -78,7 +74,7 @@ public class StatementReaderBuilder {
         if (parserEl.hasAttribute("currency")) {
             currency = Currency.getInstance(parserEl.getAttribute("currency"));
         } else {
-            currency = Currency.getInstance("USD");
+            currency = null;
         }
 
         NodeList nodes = queryNodes("path-matcher", parserEl);
