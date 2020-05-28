@@ -10,7 +10,7 @@ final class LoggingRecordMatcher implements Predicate<Record> {
     static Predicate<Record> of(Predicate<Record> what, String msg) {
         return new LoggingRecordMatcher(what, msg);
     }
-    
+
     private LoggingRecordMatcher(Predicate<Record> what, String msg) {
         Objects.requireNonNull(what);
         Objects.requireNonNull(msg);

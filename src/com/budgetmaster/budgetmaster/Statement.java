@@ -24,13 +24,19 @@ interface Statement extends ThrowingSupplier<Stream<Record>> {
             }
 
             @Override
-            public Stream<Record> get() throws Throwable {
+            public Stream<Record> get() throws Exception {
                 Stream<Record> records = rs.read(path);
 
-                Stream<RecordBuilder> rbStream = records.map(RecordBuilder::from).peek(
-                        rb -> {
+                RecordIndexSupplier index = new RecordIndexSupplier();
+                Stream<RecordBuilder> rbStream = records
+                        .map(RecordBuilder::from)
+                        .sequential()
+                        .peek(rb -> {
                             if (rb.getSource() == null) {
                                 rb.setSource(this);
+                            }
+                            if (rb.getId() == null) {
+                                rb.setId(index.getNext());
                             }
                         });
 
@@ -44,5 +50,13 @@ interface Statement extends ThrowingSupplier<Stream<Record>> {
                 return rbStream.map(RecordBuilder::create);
             }
         };
+    }
+
+    static class RecordIndexSupplier {
+        String getNext() {
+            return String.format("#%d", ++recordIdx);
+        }
+
+        private int recordIdx;
     }
 }

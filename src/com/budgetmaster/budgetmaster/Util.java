@@ -34,13 +34,13 @@ final class Util {
                     xmlFile), ex);
         }
     }
-    
+
     static String appendEllipsis(String v, int maxLength) {
         return insertEllipsis(v, maxLength, EllipsisMode.APPEND);
     }
-    
-    enum EllipsisMode { APPEND, PREPEND }; 
-    
+
+    enum EllipsisMode { APPEND, PREPEND };
+
     static String insertEllipsis(String v, int maxLength, EllipsisMode mode) {
         validateEllipsisStringMaxLength(maxLength);
         if (v != null && v.length() > maxLength) {
@@ -72,7 +72,7 @@ final class Util {
         }
         return v.toString();
     }
-    
+
     private static void validateEllipsisStringMaxLength(int v) {
         if (v < ELLIPSES.length()) {
             throw new IllegalArgumentException(String.format(
@@ -86,6 +86,6 @@ final class Util {
     final static Currency USD = Currency.getInstance("USD");
 
     private final static String ELLIPSES = "...";
-    
+
     private final static Pattern WHITESPACE_PATTERN = Pattern.compile("\\s+");
 }

@@ -11,7 +11,7 @@ final class LoggingRecordMapper implements UnaryOperator<Record> {
             String msg) {
         return new LoggingRecordMapper(what, msg);
     }
-    
+
     private LoggingRecordMapper(UnaryOperator<Record> what, String msg) {
         Objects.requireNonNull(what);
         Objects.requireNonNull(msg);

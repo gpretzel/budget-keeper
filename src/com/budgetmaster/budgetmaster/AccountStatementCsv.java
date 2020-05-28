@@ -21,14 +21,14 @@ public abstract class AccountStatementCsv implements RecordSupplier {
     @Override
     final public Stream<Record> read(Path csvFilePath) throws IOException {
         final Map<RecordBuilder.Setter, Enum<?>> fieldMapper = fieldMapper();
-        
+
         final List<Record> result = new ArrayList<>();
-        
+
         BiConsumer<String, Exception> reportError = (msg, ex) -> {
             throw new RuntimeException(String.format("Error %s record #%d", msg,
                     result.size() + 1), ex);
         };
-        
+
         try (Reader in = Files.newBufferedReader(csvFilePath)) {
             Iterable<CSVRecord> records = initParser().parse(in);
             for (CSVRecord record : records) {
@@ -36,7 +36,8 @@ public abstract class AccountStatementCsv implements RecordSupplier {
                 for (var fieldEntry : fieldMapper.entrySet()) {
                     final String value = record.get(fieldEntry.getValue().name());
                     switch (fieldEntry.getKey()) {
-                        case Date:
+                        case TransactionDate:
+                        case PostingDate:
                             try {
                                 final LocalDate date = LocalDate.parse(value,
                                         recordDateTimeFormatter());
@@ -58,6 +59,16 @@ public abstract class AccountStatementCsv implements RecordSupplier {
                             }
                             break;
 
+                        case Tags:
+                            try {
+                                final String[] tags = Util.splitAtWhitespace(value);
+                                setterHelper(fieldEntry.getKey().method, rb, tags);
+                            } catch (IllegalArgumentException ex) {
+                                reportError.accept(String.format(
+                                        "parsing tags (%s) of", value), ex);
+                            }
+                            break;
+
                         default:
                             try {
                                 setterHelper(fieldEntry.getKey().method, rb, value);
@@ -69,12 +80,12 @@ public abstract class AccountStatementCsv implements RecordSupplier {
 
                 try {
                     customReadRecord(rb, record);
-                    
+
                     if (rb.getAmount().isEmpty()) {
                         // Case of "Order" records. No amount specified.
                         continue;
                     }
-                    
+
                     result.add(rb.create());
                 } catch (RuntimeException ex) {
                     reportError.accept("reading", ex);
@@ -84,12 +95,12 @@ public abstract class AccountStatementCsv implements RecordSupplier {
 
         return result.stream();
     }
-    
+
     protected void customReadRecord(RecordBuilder rb, CSVRecord record) {
     }
-    
+
     protected abstract Map<RecordBuilder.Setter, Enum<?>> fieldMapper();
-    
+
     protected abstract DateTimeFormatter recordDateTimeFormatter();
 
     protected abstract CSVFormat initParser();

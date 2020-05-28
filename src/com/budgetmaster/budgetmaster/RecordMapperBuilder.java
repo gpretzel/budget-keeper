@@ -5,15 +5,20 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.function.UnaryOperator;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpression;
@@ -25,34 +30,99 @@ import org.w3c.dom.NodeList;
 
 
 final class RecordMapperBuilder {
-    UnaryOperator<Record> createFromXml(Document doc) throws IOException {
+    UnaryOperator<Stream<Record>> createFromXml(Document doc) throws IOException {
         try {
             XPathFactory xpathfactory = XPathFactory.newInstance();
             xpath = xpathfactory.newXPath();
             globalMatchers = createRecordMatchers(doc);
 
-            List<UnaryOperator<Record>> passes = new ArrayList<>();
-
-            NodeList nodes = queryNodes("//pass", doc.getDocumentElement());
-            for (int i = 0; i < nodes.getLength(); i++) {
-                Element el = (Element) nodes.item(i);
-                passes.add(createRecordMappers(el));
+            final List<String> mapperIdsList;
+            if (mapperIds != null) {
+                mapperIdsList = List.of(mapperIds);
+            } else {
+                mapperIdsList = null;
             }
 
-            return fold(passes, true);
+            List<UnaryOperator<Stream<Record>>> mappers = new ArrayList<>();
+
+            NodeList nodes = queryNodes("(//pass|//filter-excludings)",
+                    doc.getDocumentElement());
+            for (int i = 0; i < nodes.getLength(); i++) {
+                Element el = (Element) nodes.item(i);
+
+                if (mapperIdsList != null) {
+                    if (!el.hasAttribute("id") || !mapperIdsList.contains(
+                            el.getAttribute("id"))) {
+                        continue;
+                    }
+                }
+
+                switch (el.getLocalName()) {
+                    case "pass": {
+                        UnaryOperator<Record> recordMapper = createRecordMappers(
+                                el);
+                        mappers.add(
+                                (records) -> records.map(recordMapper).filter(
+                                        Objects::nonNull));
+                        break;
+                    }
+
+                    case "filter-excludings": {
+                        Predicate<Record> recordMatcher = createRecordMatchers(
+                                el);
+                        ExcludingRecordsFilter filter = new ExcludingRecordsFilter();
+                        filter.negate(queryNodes("negate", el).getLength() != 0);
+                        filter.refund(queryNodes("refund", el).getLength() != 0);
+
+                        NodeList refundText = queryNodes(
+                                "period-days[last()]/text()", el);
+                        if (refundText.getLength() != 0) {
+                            int periodDays = Integer.parseInt(
+                                    refundText.item(0).getNodeValue());
+                            filter.maxPeriodDays(periodDays);
+                        }
+
+                        mappers.add(records -> filter.apply(records.filter(
+                                Objects::nonNull).filter(recordMatcher)));
+                    }
+                }
+            }
+
+            return fold(mappers, true);
         } catch (XPathExpressionException ex) {
             // Should never happen at run-time.
             throw new RuntimeException(ex);
         }
     }
 
-    UnaryOperator<Record> createFromXml(Path xmlFile) throws IOException {
+    UnaryOperator<Stream<Record>> createFromXml(Path xmlFile) throws IOException {
         return createFromXml(Util.readXml(xmlFile));
     }
-    
-    RecordMapperBuilder setPayPalRecordMapperSupplier(Supplier<UnaryOperator<Record>> v) {
+
+    RecordMapperBuilder setPayPalRecordMapperSupplier(
+            Supplier<UnaryOperator<Record>> v) {
         payPalRecordMapperSupplier = v;
         return this;
+    }
+
+    RecordMapperBuilder setMappersOrder(String[] mapperIds) {
+        this.mapperIds = mapperIds;
+        return this;
+    }
+
+    RecordMapperBuilder collectDiscardedRecords(boolean v) {
+        if (v) {
+            discardedRecords = Collections.synchronizedList(
+                    new ArrayList<Record>());
+        } else {
+            discardedRecords = null;
+        }
+        return this;
+    }
+
+    Stream<Record> getDiscardedRecords() {
+        Objects.requireNonNull(discardedRecords);
+        return discardedRecords.stream();
     }
 
     private Map<String, Predicate<Record>> createRecordMatchers(Document doc) throws
@@ -68,8 +138,8 @@ final class RecordMapperBuilder {
         return result;
     }
 
-    private static UnaryOperator<Record> fold(
-            List<UnaryOperator<Record>> actions, boolean iterateAll) {
+    private static <T> UnaryOperator<T> fold(
+            List<UnaryOperator<T>> actions, boolean iterateAll) {
         if (actions.isEmpty()) {
             return UnaryOperator.identity();
         }
@@ -79,25 +149,66 @@ final class RecordMapperBuilder {
         }
 
         if (iterateAll) {
-            return (record) -> {
-                Iterator<UnaryOperator<Record>> it = actions.iterator();
-                while(it.hasNext() && record != null) {
-                    record = it.next().apply(record);
+            return (item) -> {
+                Iterator<UnaryOperator<T>> it = actions.iterator();
+                while(it.hasNext() && item != null) {
+                    item = it.next().apply(item);
                 }
-                return record;
+                return item;
             };
         }
 
-        return (record) -> {
-            Iterator<UnaryOperator<Record>> it = actions.iterator();
+        return (item) -> {
+            Iterator<UnaryOperator<T>> it = actions.iterator();
             while(it.hasNext()) {
-                Record mappedRecord = it.next().apply(record);
-                if (mappedRecord != record) {
-                    return mappedRecord;
+                T mappedItem = it.next().apply(item);
+                if (mappedItem != item) {
+                    return mappedItem;
                 }
             }
-            return record;
+            return item;
         };
+    }
+
+    private static <T> Predicate<T> foldPredicates(List<Predicate<T>> predicates,
+            boolean allMatch) {
+        if (predicates.isEmpty()) {
+            return s -> true;
+        }
+
+        if (predicates.size() == 1) {
+            return predicates.get(0);
+        }
+
+        if (allMatch) {
+            return v -> {
+                return predicates.stream().allMatch(pred -> pred.test(v));
+            };
+        }
+
+        return v -> {
+            return predicates.stream().anyMatch(pred -> pred.test(v));
+        };
+    }
+
+    private Predicate<Record> createRecordMatchers(Element root) throws
+            XPathExpressionException {
+        List<Predicate<Record>> matchers = new ArrayList<>();
+
+        NodeList matcherNodes = queryNodes("matcher", root);
+        for (int i = 0; i < matcherNodes.getLength(); i++) {
+            Element matcherEl = (Element)matcherNodes.item(i);
+
+            final Predicate<Record> matcher;
+            if (matcherEl.hasAttribute("ref")) {
+                matcher = globalMatchers.get(matcherEl.getAttribute("ref"));
+            } else {
+                matcher = createRecordMatcher(matcherEl);
+            }
+            matchers.add(matcher);
+        }
+
+        return foldPredicates(matchers, false);
     }
 
     private UnaryOperator<Record> createRecordMappers(Element root) throws
@@ -108,30 +219,15 @@ final class RecordMapperBuilder {
         for (int i = 0; i < nodes.getLength(); i++) {
             Element el = (Element)nodes.item(i);
 
-            NodeList matcherNodes = queryNodes("matcher", el);
-            for (int j = 0; j < matcherNodes.getLength(); j++) {
-                Element matcherEl = (Element)matcherNodes.item(j);
+            final Predicate<Record> matcher = createRecordMatchers(el);
+            final UnaryOperator<Record> mapper = createRecordMapper(el);
 
-                final Predicate<Record> matcher;
-                if (matcherEl.hasAttribute("ref")) {
-                    matcher = globalMatchers.get(matcherEl.getAttribute("ref"));
-                } else {
-                    matcher = createRecordMatcher(matcherEl);
+            actions.add((record) -> {
+                if (matcher.test(record)) {
+                   return mapper.apply(record);
                 }
-
-                UnaryOperator<Record> mapper = createRecordMapper(el);
-
-                actions.add((record) -> {
-                    if (matcher.test(record)) {
-                       return mapper.apply(record);
-                    }
-                    return record;
-                });
-            }
-        }
-
-        if (queryNodes("discard-unmatched", root).getLength() != 0) {
-            actions.add(DISCARD_ACTION);
+                return record;
+            });
         }
 
         return fold(actions, false);
@@ -151,41 +247,56 @@ final class RecordMapperBuilder {
         List<UnaryOperator<Record>> actions = new ArrayList<>();
 
         NodeList nodes = queryNodes(
-                "set-category|set-description|negate-amount|discard|merge-with-paypal", actionEl);
+                "tag|category|description|negation|discard|merge-with-paypal", actionEl);
         for (int i = 0; i < nodes.getLength(); i++) {
             Element el = (Element) nodes.item(i);
             switch (el.getNodeName()) {
                 case "discard":
-                    actions.clear();
-                    actions.add(DISCARD_ACTION);
-                    i = nodes.getLength();
+                    actions.add(LoggingRecordMapper.of((record) -> {
+                        if (discardedRecords != null) {
+                            discardedRecords.add(record);
+                        }
+                        return null;
+                    }, "Discard"));
                     break;
-                case "negate-amount":
+
+                case "negation":
                     actions.add(loggable(RecordFieldMapper.amountNegator(),
                             "Negate amount of"));
                     break;
-                case "set-category":
+
+                case "category":
                     String value = el.getFirstChild().getNodeValue();
                     actions.add(loggable(new RecordFieldMapper(value,
                             RecordBuilder::setCategory), String.format(
                             "Set category to [%s] of", value)));
                     break;
-                case "set-description":
+
+                case "description":
                     value = el.getFirstChild().getNodeValue();
                     actions.add(loggable(new RecordFieldMapper(value,
                             RecordBuilder::setDescription), String.format(
                             "Set description to [%s] of", value)));
                     break;
+
+                case "tag":
+                    value = el.getFirstChild().getNodeValue();
+                    actions.add(loggable(new RecordFieldMapper(value,
+                            RecordBuilder::addTag), String.format(
+                            "Add [%s] tag to", value)));
+                    break;
+
                 case "merge-with-paypal":
                     if (payPalRecordMapperSupplier != null) {
                         actions.add(payPalRecordMapperSupplier.get());
                     }
                     break;
+
                 default:
                     break;
             }
         }
-        
+
         if (nodes.getLength() == 0) {
             // Just keep the record
             actions.add(IDENTITY_ACTION);
@@ -194,64 +305,81 @@ final class RecordMapperBuilder {
         return fold(actions, true);
     }
 
-    private Predicate<Record> createRecordMatcher(Element matcherEl) throws XPathExpressionException {
-        List<Predicate<Record>> predicates = new ArrayList<>();
+    private Predicate<Record> createRecordMatcher(Element root) throws
+            XPathExpressionException {
+        return createRecordMatcher(root, true);
+    }
 
-        NodeList nodes = queryNodes("field", matcherEl);
-        for (int i = 0; i < nodes.getLength(); i++) {
-            Element fieldEl = (Element)nodes.item(i);
-            String fieldName = fieldEl.getAttribute("name").toLowerCase();
-            Function<Record, String> fieldAccessor = FIELD_ACCESSORS.get(fieldName);
-            String regexp = fieldEl.getAttribute("regexp");
+    private Predicate<Record> createRecordSpecificMatcher(Element el,
+            boolean allMatch) throws XPathExpressionException {
+        final String matcherType = el.getLocalName();
 
-            Predicate<Record> pred = loggable(new StringMatcher(regexp,
-                    fieldAccessor), String.format("Regexp [%s] applied to %s",
-                    regexp, fieldName.toLowerCase()));
-            predicates.add(pred);
+        if (FIELD_MATCHER_NAMES.contains(matcherType)) {
+            Function<Record, String> fieldAccessor = FIELD_ACCESSORS.get(
+                    matcherType);
+            String regexp = el.getFirstChild().getNodeValue();
+
+            return loggable(new StringMatcher(regexp, fieldAccessor),
+                    String.format("Regexp [%s] applied to %s", regexp,
+                            matcherType));
         }
 
-        nodes = queryNodes("mapper[@ref]", matcherEl);
-        for (int i = 0; i < nodes.getLength(); i++) {
-            Element nestedMatcherEl = (Element)nodes.item(i);
-            Predicate<Record> pred = globalMatchers.get(
-                    nestedMatcherEl.getAttribute("ref"));
-            predicates.add(pred);
-        }
+        switch (matcherType) {
+            case "not":
+                return createRecordMatcher(el, allMatch).negate();
 
-        nodes = queryNodes("period|period-inclusive", matcherEl);
-        for (int i = 0; i < nodes.getLength(); i++) {
-            Element periodEl = (Element)nodes.item(i);
+            case "or":
+                return createRecordMatcher(el, false);
 
-            String begin = periodEl.getAttribute("from");
-            LocalDate beginDate = LocalDate.parse(begin, PERIOD_DATE_FORMAT);
+            case "matcher":
+                return globalMatchers.get(el.getAttribute("ref"));
 
-            String end = periodEl.getAttribute("to");
-            LocalDate endDate = LocalDate.parse(end, PERIOD_DATE_FORMAT);
-
-            boolean inclusive = "period-inclusive".equals(periodEl.getNodeName());
-
-            final String openBraket, closeBraket;
-            if (inclusive) {
-                openBraket = "[";
-                closeBraket = "]";
-            } else {
-                openBraket = "(";
-                closeBraket = ")";
+            case "tag": {
+                String tag = el.getFirstChild().getNodeValue();
+                return loggable((Predicate<Record>) (record) -> record.hasTag(
+                        tag), String.format("Tag [%s]", tag));
             }
 
-            Predicate<Record> pred = loggable(new DateRangeMatcher(beginDate,
-                    endDate, inclusive), String.format("Date range %s%s-%s%s",
-                    openBraket, begin, end, closeBraket));
-            predicates.add(pred);
+            case "period-inclusive":
+            case "period": {
+                String begin = el.getAttribute("from");
+                LocalDate beginDate = LocalDate.parse(begin, PERIOD_DATE_FORMAT);
+
+                String end = el.getAttribute("to");
+                LocalDate endDate = LocalDate.parse(end, PERIOD_DATE_FORMAT);
+
+                boolean inclusive = "period-inclusive".equals(el.getNodeName());
+
+                final String openBraket, closeBraket;
+                if (inclusive) {
+                    openBraket = "[";
+                    closeBraket = "]";
+                } else {
+                    openBraket = "(";
+                    closeBraket = ")";
+                }
+
+                return loggable(new DateRangeMatcher(beginDate, endDate,
+                        Record::getTransactionDate, inclusive), String.format(
+                        "Date range %s%s-%s%s", openBraket, begin, end,
+                        closeBraket));
+            }
         }
 
-        if (predicates.size() == 1) {
-            return predicates.get(0);
+        throw new IllegalArgumentException();
+    }
+
+    private Predicate<Record> createRecordMatcher(Element root, boolean allMatch)
+            throws XPathExpressionException {
+        List<Predicate<Record>> predicates = new ArrayList<>();
+
+        NodeList nodes = queryNodes(SPECIFIC_MATCHER_XPATH, root);
+        for (int i = 0; i < nodes.getLength(); i++) {
+            Element el = (Element)nodes.item(i);
+            predicates.add(createRecordSpecificMatcher(el, allMatch));
         }
 
-        return (record) -> {
-            return predicates.stream().allMatch(pred -> pred.test(record));
-        };
+        return foldPredicates(predicates, allMatch);
     }
 
     private NodeList queryNodes(String xpathExpr, Element root) throws
@@ -263,6 +391,8 @@ final class RecordMapperBuilder {
     private XPath xpath;
     private Map<String, Predicate<Record>> globalMatchers;
     private Supplier<UnaryOperator<Record>> payPalRecordMapperSupplier;
+    private List<Record> discardedRecords;
+    private String[] mapperIds;
 
     private final static Map<String, Function<Record, String>> FIELD_ACCESSORS = Map.of(
             "description", Record::getDescription,
@@ -272,12 +402,15 @@ final class RecordMapperBuilder {
             "statement-id", (record) -> record.getSource().getId()
     );
 
+    private final static Set<String> FIELD_MATCHER_NAMES = FIELD_ACCESSORS.keySet();
+
+    private final static String SPECIFIC_MATCHER_XPATH = Stream.concat(Stream.of("or",
+            "not", "matcher[@ref]", "tag", "period", "period-inclusive"),
+            FIELD_MATCHER_NAMES.stream()).collect(Collectors.joining("|"));
+
     private final static DateTimeFormatter PERIOD_DATE_FORMAT = DateTimeFormatter.ofPattern(
             "dd/MM/yy", Locale.US);
 
-    private final static UnaryOperator<Record> DISCARD_ACTION = LoggingRecordMapper.of(
-            (record) -> null, "Discard");
-    
     private final static UnaryOperator<Record> IDENTITY_ACTION = LoggingRecordMapper.of(
             (record) -> RecordBuilder.from(record).create(), "Identity");
 }

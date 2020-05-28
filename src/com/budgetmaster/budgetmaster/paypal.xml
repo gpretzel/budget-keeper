@@ -3,16 +3,17 @@
   <parser class="com.budgetmaster.budgetmaster.PayPalStatementCsv" id="PayPal statement">
     <path-matcher>glob:**/*.csv</path-matcher>
   </parser>
-
+  
   <pass>
     <action>
       <matcher>
-        <field name="Category" regexp="\bPayment$"/>
+        <category>\bPayment$</category>
       </matcher>
-      <negate-amount/>
+      <negation/>
+      <tag>paypal</tag>
     </action>
-    
-    <discard-unmatched/>
+
+    <action><discard/></action>
   </pass>
 
 </config>

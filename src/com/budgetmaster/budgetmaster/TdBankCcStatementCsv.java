@@ -9,13 +9,13 @@ final class TdBankCcStatementCsv extends AccountStatementCsv {
     @Override
     protected Map<RecordBuilder.Setter, Enum<?>> fieldMapper() {
         return Map.of(
-                RecordBuilder.Setter.Amount, Headers.Amount, 
-                RecordBuilder.Setter.Date, Headers.Date,
+                RecordBuilder.Setter.Amount, Headers.Amount,
+                RecordBuilder.Setter.TransactionDate, Headers.Date,
                 RecordBuilder.Setter.Description, Headers.MerchantName,
                 RecordBuilder.Setter.Category, Headers.MerchantCategoryDescription
         );
     }
-    
+
     @Override
     protected DateTimeFormatter recordDateTimeFormatter() {
         return DATE_FORMATTER;

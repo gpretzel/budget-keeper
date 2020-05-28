@@ -12,14 +12,17 @@ final class RecordsReaderCsv extends AccountStatementCsv {
     @Override
     protected Map<RecordBuilder.Setter, Enum<?>> fieldMapper() {
         return Map.of(
-                RecordBuilder.Setter.Amount, RecordsSerializer.Field.Amount, 
-                RecordBuilder.Setter.Date, RecordsSerializer.Field.Date,
+                RecordBuilder.Setter.Amount, RecordsSerializer.Field.Amount,
+                RecordBuilder.Setter.Id, RecordsSerializer.Field.Id,
+                RecordBuilder.Setter.TransactionDate, RecordsSerializer.Field.TransactionDate,
+                RecordBuilder.Setter.PostingDate, RecordsSerializer.Field.PostingDate,
                 RecordBuilder.Setter.Currency, RecordsSerializer.Field.Currency,
                 RecordBuilder.Setter.Description, RecordsSerializer.Field.Description,
+                RecordBuilder.Setter.Tags, RecordsSerializer.Field.Tags,
                 RecordBuilder.Setter.Category, RecordsSerializer.Field.Category
         );
     }
-    
+
     @Override
     protected DateTimeFormatter recordDateTimeFormatter() {
         return RecordsSerializer.csv().getDateTimeFormatter();
@@ -32,7 +35,7 @@ final class RecordsReaderCsv extends AccountStatementCsv {
                 .toArray(String[]::new);
         return CSVFormat.RFC4180.withFirstRecordAsHeader().withHeader(header);
     }
-    
+
     @Override
     protected void customReadRecord(RecordBuilder rb, CSVRecord record) {
         String id = record.get(RecordsSerializer.Field.StatementId);

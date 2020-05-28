@@ -7,7 +7,9 @@ import java.time.MonthDay;
 import java.time.Year;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -37,17 +39,26 @@ public abstract class AccountStatementPdf implements RecordSupplier {
 
         String components[] = Util.splitAtWhitespace(str, 2);
 
-        rb.setDate(getRecordDate(components[0]));
+        rb.setTransactionDate(getRecordDate(components[0]));
 
         parseRecord(components[1], rb);
 
         return rb.create();
     }
 
-    private LocalDate getRecordDate(String str) {
+    protected LocalDate getRecordDate(String str) {
         try {
             MonthDay md = MonthDay.parse(str, recordDateTimeFormatter());
-            return year.atMonthDay(md);
+            LocalDate date = Year.from(beginPeriod).atMonthDay(md);
+            if (date.isBefore(beginPeriod)) {
+                date = Year.from(endPeriod).atMonthDay(md);
+                if (date.isAfter(endPeriod)) {
+                    throw new IllegalArgumentException(String.format(
+                            "Month day [%s] is out of statement period [%s - %s]",
+                            md.format(MONTH_DAY_DATE_FORMAT), beginPeriod, endPeriod));
+                }
+            }
+            return date;
         } catch (DateTimeParseException ex) {
             throw new IllegalArgumentException(ex);
         }
@@ -56,21 +67,37 @@ public abstract class AccountStatementPdf implements RecordSupplier {
     private void setPeriod(TextFrame text) {
         String periodStr = periodString(text);
 
-        String components[];
-        if (periodStringSeparator() != null) {
-            components = periodStr.split(periodStringSeparator(), 2);
-        } else {
-            components = new String[] { periodStr };
-        }
+        String components[] = periodStr.split(periodStringSeparator(), 2);
 
         try {
-            LocalDate date = LocalDate.parse(components[0],
+            beginPeriod = LocalDate.parse(components[0],
                     periodStringDateTimeFormatter());
-            year = Year.from(date);
         } catch (DateTimeParseException ex) {
             throw new IllegalArgumentException(String.format(
                     "Can't parse statement period start date from [%s] string",
                     periodStr), ex);
+        }
+
+        try {
+            endPeriod = LocalDate.parse(components[1],
+                    periodStringDateTimeFormatter());
+        } catch (DateTimeParseException ex) {
+            throw new IllegalArgumentException(String.format(
+                    "Can't parse statement period end date from [%s] string",
+                    periodStr), ex);
+        }
+
+        if (!endPeriod.isAfter(beginPeriod)) {
+            throw new IllegalArgumentException(String.format(
+                    "End period date [%s] should follow begin period date [%s]",
+                    endPeriod, beginPeriod));
+        }
+
+        if (ChronoUnit.YEARS.between(Year.from(beginPeriod),
+                Year.from(endPeriod)) > 1) {
+            throw new IllegalArgumentException(String.format(
+                    "End [%s] and begin [%s] period dates should be in the same year or in the adjacent years",
+                    endPeriod, beginPeriod));
         }
     }
 
@@ -89,5 +116,9 @@ public abstract class AccountStatementPdf implements RecordSupplier {
 
     protected abstract DateTimeFormatter recordDateTimeFormatter();
 
-    private Year year;
+    private LocalDate beginPeriod;
+    private LocalDate endPeriod;
+
+    private final static DateTimeFormatter MONTH_DAY_DATE_FORMAT = DateTimeFormatter.ofPattern(
+            "MMM dd", Locale.US);
 }

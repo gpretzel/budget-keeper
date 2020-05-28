@@ -10,13 +10,13 @@ import java.util.function.Supplier;
 public class Functional {
     @FunctionalInterface
     public interface ThrowingConsumer<T> {
-        void accept(T t) throws Throwable;
+        void accept(T t) throws Exception;
 
         public static <T> Consumer<T> toConsumer(ThrowingConsumer<T> v) {
             return o -> {
                 try {
                     v.accept(o);
-                } catch (Throwable ex) {
+                } catch (Exception ex) {
                     rethrowUnchecked(ex);
                 }
             };
@@ -25,13 +25,13 @@ public class Functional {
 
     @FunctionalInterface
     public interface ThrowingSupplier<T> {
-        T get() throws Throwable;
+        T get() throws Exception;
 
         public static <T> Supplier<T> toSupplier(ThrowingSupplier<T> v) {
             return () -> {
                 try {
                     return v.get();
-                } catch (Throwable ex) {
+                } catch (Exception ex) {
                     rethrowUnchecked(ex);
                 }
                 // Unreachable
@@ -42,13 +42,13 @@ public class Functional {
 
     @FunctionalInterface
     public interface ThrowingFunction<T, R> {
-        R apply(T t) throws Throwable;
+        R apply(T t) throws Exception;
 
         public static <T, R> Function<T, R> toFunction(ThrowingFunction<T, R> v) {
             return (t) -> {
                 try {
                     return v.apply(t);
-                } catch (Throwable ex) {
+                } catch (Exception ex) {
                     rethrowUnchecked(ex);
                 }
                 // Unreachable
@@ -59,13 +59,13 @@ public class Functional {
 
     @FunctionalInterface
     public interface ThrowingRunnable {
-        void run() throws Throwable;
+        void run() throws Exception;
 
         public static Runnable toRunnable(ThrowingRunnable v) {
             return () -> {
                 try {
                     v.run();
-                } catch (Throwable ex) {
+                } catch (Exception ex) {
                     rethrowUnchecked(ex);
                 }
             };
@@ -107,15 +107,19 @@ public class Functional {
     }
 
     @SuppressWarnings("unchecked")
-    public static void rethrowUnchecked(Throwable throwable) throws ExceptionBox {
-        if (throwable instanceof ExceptionBox) {
-            throw (ExceptionBox)throwable;
+    public static void rethrowUnchecked(Exception ex) throws ExceptionBox {
+        if (ex instanceof ExceptionBox) {
+            throw (ExceptionBox)ex;
         }
 
-        if (throwable instanceof InvocationTargetException) {
-            new ExceptionBox(throwable.getCause());
+        if (ex instanceof RuntimeException) {
+            throw (RuntimeException)ex;
         }
 
-        throw new ExceptionBox(throwable);
+        if (ex instanceof InvocationTargetException) {
+            throw new ExceptionBox(ex.getCause());
+        }
+
+        throw new ExceptionBox(ex);
     }
 }

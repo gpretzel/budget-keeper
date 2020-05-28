@@ -10,7 +10,7 @@ public class MonetaryAmountNormalizer {
         if (sepIdx > 0) {
             result = result.substring(0, sepIdx) + result.substring(sepIdx + 1);
         }
-        
+
         BigDecimal number = new BigDecimal(result).stripTrailingZeros();
         if (negate) {
             number = number.negate();

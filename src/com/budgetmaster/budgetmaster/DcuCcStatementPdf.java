@@ -3,7 +3,10 @@ package com.budgetmaster.budgetmaster;
 import static com.budgetmaster.budgetmaster.Util.EOL;
 import java.lang.invoke.MethodHandles;
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.Year;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -77,13 +80,15 @@ final class DcuCcStatementPdf extends AccountStatementPdf {
         // 12/12 GULF OIL 91186030 SOMERVILLE MA 20.79
         String[] components = Util.splitAtWhitespace(str);
 
+        rb.setPostingDate(getRecordDate(components[0]));
+
         rb.setAmount(components[components.length - 1]);
         String desc = Stream.of(components)
                 .skip(1)
                 .limit(components.length - 2)
                 .collect(Collectors.joining(" "));
         rb.setDescription(desc);
-        
+
         if (PAYMENT_TRANSACTION.matcher(desc).matches()) {
             rb.negateAmount();
         }
@@ -98,12 +103,30 @@ final class DcuCcStatementPdf extends AccountStatementPdf {
 
         // Extract from
         // Statement Closing Date 01/10/18
-        String result = text.set(EOL + "Statement Closing Date", EOL).getStrippedValue();
+        String endingPeriodStr = text.set(EOL + "Statement Closing Date", EOL).getStrippedValue();
 
         purchasesChecksum = createRecordChecksum(text, "Purchases",
                 null, new MonetaryAmountNormalizer());
 
-        return result;
+        String daysInPeriodStr = text.set(EOL + "Days in Period", EOL).getStrippedValue();
+
+        try {
+            LocalDate endingPeriod = LocalDate.parse(endingPeriodStr, periodStringDateTimeFormatter());
+            int daysInPeriod = Integer.parseInt(daysInPeriodStr);
+
+            String result = String.join(periodStringSeparator(),
+                    endingPeriod.minusDays(daysInPeriod + 1).format(
+                            periodStringDateTimeFormatter()), endingPeriodStr);
+            return result;
+        } catch (DateTimeParseException ex) {
+            throw new IllegalArgumentException(String.format(
+                    "Can't parse statement period end date from [%s] string",
+                    endingPeriodStr), ex);
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(String.format(
+                    "Can't parse statement days in period [%s] string",
+                    daysInPeriodStr), ex);
+        }
     }
 
     private static BalanceChecksum createRecordChecksum(TextFrame text, String main,
