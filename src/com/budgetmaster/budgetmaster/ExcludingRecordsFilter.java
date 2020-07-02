@@ -50,8 +50,8 @@ final class ExcludingRecordsFilter implements UnaryOperator<Stream<Record>> {
     }
 
     private Stream<Record> forEachSource(List<Record> records) {
-        return forEachCluster(records.stream(), record -> new BigDecimal(
-                record.getAmount()).abs(), this::forEachAbsAmount);
+        return forEachCluster(records.stream(),
+                record -> record.getAmount().abs(), this::forEachAbsAmount);
     }
 
     private Stream<Record> forEachAbsAmount(Stream<Record> records) {

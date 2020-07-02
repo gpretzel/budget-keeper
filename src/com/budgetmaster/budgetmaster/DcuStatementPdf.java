@@ -33,15 +33,13 @@ final class DcuStatementPdf extends AccountStatementPdf {
                 if (beginBalanceStr.isEmpty()) {
                     beginBalance = BigDecimal.ZERO;
                 } else {
-                    beginBalance = new BigDecimal(
-                        MonetaryAmountNormalizer.negate().normalize(beginBalanceStr));
+                    beginBalance = MonetaryAmount.of(beginBalanceStr).negate();
                 }
 
                 accountText = text.set(EOL, "NEW BALANCE").getStrippedValue();
 
-                final BigDecimal endBalance = new BigDecimal(
-                        MonetaryAmountNormalizer.negate().normalize(text.set(
-                                "NEW BALANCE", EOL).getStrippedValue()));
+                final BigDecimal endBalance = MonetaryAmount.of(text.set(
+                        "NEW BALANCE", EOL).getStrippedValue()).negate();
 
                 accountChecksum = new BalanceChecksum(endBalance.subtract(
                         beginBalance));

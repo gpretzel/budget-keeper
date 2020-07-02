@@ -3,6 +3,7 @@ package com.budgetmaster.budgetmaster;
 import com.budgetmaster.budgetmaster.Functional.ThrowingSupplier;
 import java.nio.file.Path;
 import java.util.Currency;
+import java.util.Objects;
 import java.util.stream.Stream;
 
 
@@ -11,7 +12,7 @@ interface Statement extends ThrowingSupplier<Stream<Record>> {
     String getSystemId();
 
     static Statement fromStatementFile(String id, Path path, Currency currency,
-            RecordSupplier rs) {
+            RecordsSupplier rs) {
         return new Statement() {
             @Override
             public String getId() {
@@ -29,14 +30,16 @@ interface Statement extends ThrowingSupplier<Stream<Record>> {
 
                 RecordIndexSupplier index = new RecordIndexSupplier();
                 Stream<RecordBuilder> rbStream = records
-                        .map(RecordBuilder::from)
                         .sequential()
+                        .peek(record -> index.nextId())
+                        .filter(Objects::nonNull)
+                        .map(RecordBuilder::from)
                         .peek(rb -> {
                             if (rb.getSource() == null) {
                                 rb.setSource(this);
                             }
                             if (rb.getId() == null) {
-                                rb.setId(index.getNext());
+                                rb.setId(index.getId());
                             }
                         });
 
@@ -53,8 +56,12 @@ interface Statement extends ThrowingSupplier<Stream<Record>> {
     }
 
     static class RecordIndexSupplier {
-        String getNext() {
-            return String.format("#%d", ++recordIdx);
+        void nextId() {
+            ++recordIdx;
+        }
+
+        String getId() {
+            return String.format("#%d", recordIdx);
         }
 
         private int recordIdx;

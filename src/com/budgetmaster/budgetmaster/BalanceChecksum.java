@@ -17,8 +17,9 @@ public final class BalanceChecksum {
     }
 
     public BalanceChecksum append(Stream<Record> records) {
-        BigDecimal amount = records.sequential().map(Record::getAmount).map(
-                BigDecimal::new).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal amount = records.sequential()
+                .map(Record::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         if (currentAmount == null) {
             currentAmount = amount;
         } else {

@@ -4,25 +4,32 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Currency;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpression;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
 import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 
-final class Util {
+public final class Util {
 
-    static String[] splitAtWhitespace(String str, int limit) {
+    public static String[] splitAtWhitespace(String str, int limit) {
         return WHITESPACE_PATTERN.split(str, limit);
     }
 
-    static String[] splitAtWhitespace(String str) {
+    public static String[] splitAtWhitespace(String str) {
         return WHITESPACE_PATTERN.split(str);
     }
 
-    static Document readXml(Path xmlFile) throws IOException {
+    public static Document readXml(Path xmlFile) throws IOException {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             factory.setNamespaceAware(true); // never forget this!
@@ -35,13 +42,13 @@ final class Util {
         }
     }
 
-    static String appendEllipsis(String v, int maxLength) {
+    public static String appendEllipsis(String v, int maxLength) {
         return insertEllipsis(v, maxLength, EllipsisMode.APPEND);
     }
 
     enum EllipsisMode { APPEND, PREPEND };
 
-    static String insertEllipsis(String v, int maxLength, EllipsisMode mode) {
+    public static String insertEllipsis(String v, int maxLength, EllipsisMode mode) {
         validateEllipsisStringMaxLength(maxLength);
         if (v != null && v.length() > maxLength) {
             v = v.substring(0, maxLength - ELLIPSES.length());
@@ -55,7 +62,7 @@ final class Util {
         return v;
     }
 
-    static String pathEllipsis(Path v, int maxLength) {
+    public static String pathEllipsis(Path v, int maxLength) {
         validateEllipsisStringMaxLength(maxLength);
         if (v == null) {
             return null;
@@ -73,6 +80,33 @@ final class Util {
         return v.toString();
     }
 
+    public static void saveToCsvFile(Path path, Stream<Record> records) throws
+            IOException {
+        RecordsSerializer serializer = RecordsSerializer.csv().withCsvHeader();
+        if ("--".equals(path.toString())) {
+            serializer.saveToStream(records, System.out);
+        } else {
+            serializer.saveToFile(records, path);
+        }
+    }
+
+    public static String readLastElement(Element root, String elementName) {
+        XPathFactory xpathfactory = XPathFactory.newInstance();
+        XPath xpath = xpathfactory.newXPath();
+
+        try {
+            XPathExpression expr = xpath.compile(elementName + "[last()]/text()");
+            NodeList nodes = (NodeList) expr.evaluate(root, XPathConstants.NODESET);
+            if (nodes.getLength() != 0) {
+                return nodes.item(0).getNodeValue();
+            }
+            return null;
+        } catch (XPathExpressionException ex) {
+            // Should never happen
+            throw new RuntimeException(ex);
+        }
+    }
+
     private static void validateEllipsisStringMaxLength(int v) {
         if (v < ELLIPSES.length()) {
             throw new IllegalArgumentException(String.format(
@@ -81,9 +115,9 @@ final class Util {
         }
     }
 
-    final static String EOL = System.lineSeparator();
+    public final static String EOL = System.lineSeparator();
 
-    final static Currency USD = Currency.getInstance("USD");
+    public final static Currency USD = Currency.getInstance("USD");
 
     private final static String ELLIPSES = "...";
 

@@ -8,7 +8,7 @@ import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVRecord;
 
 
-final class RecordsReaderCsv extends AccountStatementCsv {
+final public class RecordsReaderCsv extends AccountStatementCsv {
     @Override
     protected Map<RecordBuilder.Setter, Enum<?>> fieldMapper() {
         return Map.of(

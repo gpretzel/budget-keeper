@@ -31,7 +31,7 @@ public class StatementReaderBuilder {
             NodeList nodes = queryNodes("//parser", doc.getDocumentElement());
             for (int i = 0; i < nodes.getLength(); i++) {
                 Element el = (Element) nodes.item(i);
-                parsers.add(createRecordSupplier(el));
+                parsers.add(createRecordsSupplier(el));
             }
 
             return (path) -> {
@@ -50,9 +50,9 @@ public class StatementReaderBuilder {
         }
     }
 
-    private static RecordSupplier createRecordSupplier(String clazz) {
+    private static RecordsSupplier createRecordsSupplier(String clazz) {
         try {
-            return (RecordSupplier) Class.forName(clazz).getDeclaredConstructor().newInstance();
+            return (RecordsSupplier) Class.forName(clazz).getDeclaredConstructor().newInstance();
         } catch (IllegalAccessException | InstantiationException
                 | ClassNotFoundException | NoSuchMethodException
                 | SecurityException ex) {
@@ -62,7 +62,7 @@ public class StatementReaderBuilder {
         }
     }
 
-    private Function<Path, Statement> createRecordSupplier(Element parserEl)
+    private Function<Path, Statement> createRecordsSupplier(Element parserEl)
             throws XPathExpressionException {
 
         List<Predicate<Path>> matchers = new ArrayList<>();
@@ -88,7 +88,7 @@ public class StatementReaderBuilder {
             matchers.add(pm::matches);
         }
 
-        RecordSupplier rs = createRecordSupplier(clazz);
+        RecordsSupplier rs = StatementReaderBuilder.this.createRecordsSupplier(clazz);
 
         return (path) -> {
             for (Predicate<Path> m: matchers) {

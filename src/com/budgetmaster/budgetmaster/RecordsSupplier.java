@@ -5,6 +5,6 @@ import java.nio.file.Path;
 import java.util.stream.Stream;
 
 
-public interface RecordSupplier {
+public interface RecordsSupplier {
     public Stream<Record> read(Path file) throws IOException;
 }

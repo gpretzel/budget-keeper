@@ -1,33 +1,35 @@
 package com.budgetmaster.budgetmaster;
 
+import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.Currency;
 import java.util.Objects;
 import java.util.Set;
 
 public final class Record {
-    LocalDate getTransactionDate() {
+    public LocalDate getTransactionDate() {
         return transactionDate;
     }
 
-    LocalDate getPostingDate() {
+    public LocalDate getPostingDate() {
         return postingDate;
     }
 
-    String getDescription() {
+    public String getDescription() {
         return desc;
     }
 
-    String getId() {
+    public String getId() {
         return id;
     }
 
-    String[] getTags() {
+    public String[] getTags() {
         return tags;
     }
 
-    boolean hasTag(String tag) {
+    public boolean hasTag(String tag) {
         Objects.requireNonNull(tag);
         if (tags == null) {
             return false;
@@ -35,35 +37,35 @@ public final class Record {
         return Set.of(tags).contains(tag);
     }
 
-    Currency getCurrency() {
+    public Currency getCurrency() {
         return currency;
     }
 
-    String getCurrencyCode() {
+    public String getCurrencyCode() {
         if (currency == null) {
             return null;
         }
         return currency.getCurrencyCode();
     }
 
-    String getAmount() {
+    public BigDecimal getAmount() {
         return amount;
     }
 
-    String getCategory() {
+    public String getCategory() {
         return category;
     }
 
-    Statement getSource() {
+    public Statement getSource() {
         return source;
     }
 
-    boolean isNegative() {
-        return (amount.stripLeading().charAt(0) == '-');
+    public boolean isNegative() {
+        return amount.signum() < 0;
     }
 
     Record(LocalDate transactionDate, LocalDate postingDate, String desc,
-            String amount, String category, Currency currency, Statement source,
+            BigDecimal amount, String category, Currency currency, Statement source,
             String id, String[] tags) {
         Objects.requireNonNull(transactionDate);
         Objects.requireNonNull(desc);
@@ -92,14 +94,14 @@ public final class Record {
         } else {
             sb.append(String.format("%s|%s", transactionDate, postingDate));
         }
-        sb.append(String.format("|%s|%s", amount, Util.appendEllipsis(desc, 40)));
+        sb.append(String.format("|%s|%s", amount.toPlainString(), Util.appendEllipsis(desc, 40)));
         if (category != null) {
             sb.append('|');
             sb.append(Util.appendEllipsis(category, 20));
         }
 
         if (tags != null) {
-            sb.append(String.format("|%s", (Object)tags));
+            sb.append(String.format("|%s", Arrays.toString(tags)));
         }
 
         if (currency != null) {
@@ -123,7 +125,7 @@ public final class Record {
     private final LocalDate postingDate;
     private final String desc;
     private final String category;
-    private final String amount;
+    private final BigDecimal amount;
     private final Statement source;
     private final Currency currency;
     private final String id;

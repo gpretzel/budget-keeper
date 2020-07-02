@@ -1,5 +1,7 @@
-package com.budgetmaster.budgetmaster;
+package com.budgetmaster.budgetmaster.paypal;
 
+import com.budgetmaster.budgetmaster.AccountStatementCsv;
+import com.budgetmaster.budgetmaster.RecordBuilder;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import org.apache.commons.csv.CSVFormat;

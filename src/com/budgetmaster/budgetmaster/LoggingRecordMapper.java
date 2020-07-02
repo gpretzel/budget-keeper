@@ -6,8 +6,8 @@ import java.util.function.UnaryOperator;
 import java.util.logging.Logger;
 
 
-final class LoggingRecordMapper implements UnaryOperator<Record> {
-    static UnaryOperator<Record> of(UnaryOperator<Record> what,
+public final class LoggingRecordMapper implements UnaryOperator<Record> {
+    public static UnaryOperator<Record> of(UnaryOperator<Record> what,
             String msg) {
         return new LoggingRecordMapper(what, msg);
     }
@@ -28,6 +28,6 @@ final class LoggingRecordMapper implements UnaryOperator<Record> {
     private final UnaryOperator<Record> what;
     private final String msg;
 
-    static final Logger LOGGER = Logger.getLogger(
+    public static final Logger LOGGER = Logger.getLogger(
             MethodHandles.lookup().lookupClass().getName());
 }

@@ -6,8 +6,8 @@ import java.util.function.Predicate;
 import java.util.logging.Logger;
 
 
-final class LoggingRecordMatcher implements Predicate<Record> {
-    static Predicate<Record> of(Predicate<Record> what, String msg) {
+public final class LoggingRecordMatcher implements Predicate<Record> {
+    public static Predicate<Record> of(Predicate<Record> what, String msg) {
         return new LoggingRecordMatcher(what, msg);
     }
 
@@ -31,6 +31,6 @@ final class LoggingRecordMatcher implements Predicate<Record> {
     private final Predicate<Record> what;
     private final String msg;
 
-    static final Logger LOGGER = Logger.getLogger(
+    public static final Logger LOGGER = Logger.getLogger(
             MethodHandles.lookup().lookupClass().getName());
 }

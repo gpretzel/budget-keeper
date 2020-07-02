@@ -1,14 +1,12 @@
 package com.budgetmaster.budgetmaster;
 
-import com.budgetmaster.budgetmaster.Functional.ThrowingSupplier;
 import java.io.IOException;
 import java.lang.invoke.MethodHandles;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
-import java.util.Map.Entry;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.function.Function;
 import java.util.function.UnaryOperator;
@@ -52,9 +50,9 @@ public class Main implements Callable<Integer> {
             description = "ordered list of IDs of actions to execute from the config file")
     private String[] actionIds;
 
-    @Option(names = {"-p", "--paypal"},
-            description = "pull in data from preprocessed PayPal CSV statemenet")
-    private Path payPalCsv;
+    @Option(names = {"-e", "--set-variable"},
+            description = "set variable")
+    private String[] variables;
 
     @Option(names = {"-a", "--fail-fast"},
             description = "abort after the first encountered error")
@@ -101,27 +99,31 @@ public class Main implements Callable<Integer> {
         Document configXml = Util.readXml(configXmlFile);
 
         StatementReaderBuilder rsfb = new StatementReaderBuilder();
-        RecordMapperBuilder rmb = new RecordMapperBuilder();
-        if (payPalCsv != null) {
-            rmb.setPayPalRecordMapperSupplier(ThrowingSupplier.toSupplier(
-                    () -> {
-                        if (dryRun) {
-                            return (r) -> r;
-                        }
-                        return PayPalRecordMapper.createFromCvsFile(payPalCsv);
-                    }));
-        }
+        MainRecordsProcessorBuilder mrpb = new MainRecordsProcessorBuilder();
+
+        mrpb.setVaribales(Stream.of(variables).map(str -> {
+            int sepIdx = str.indexOf('=');
+            if (sepIdx < 0) {
+                throw new IllegalArgumentException(String.format(
+                        "Invalid variable value: [%s]. Missing '=' character",
+                        str));
+            }
+            String name = str.substring(0, sepIdx);
+            String value = str.substring(sepIdx + 1);
+            return Map.entry(name, value);
+        }).collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue())));
 
         if (discardToCsvFile != null) {
-            rmb.collectDiscardedRecords(true);
+            mrpb.collectDiscardedRecords(true);
         }
 
-        rmb.setMappersOrder(actionIds);
+        mrpb.setMappersOrder(actionIds);
 
         Path[] filteredStatementPaths = explodePaths(statementPaths);
 
         Function<Path, Statement> statementCfg = rsfb.createFromXml(configXml);
-        UnaryOperator<Stream<Record>> recordsFilter = rmb.createFromXml(configXml);
+        RecordsMapper recordsMapper = mrpb.createFromXml(
+                configXml.getDocumentElement());
 
         List<Record> records = new ArrayList<>();
 
@@ -169,14 +171,17 @@ public class Main implements Callable<Integer> {
                 }
             }
 
-            records = recordsFilter.apply(records.stream()).collect(Collectors.toList());
+            records = recordsMapper
+                    .apply(records.stream())
+                    .collect(Collectors.toList());
+            recordsMapper.onRecordsProcessed();
 
             if (saveToCsvFile != null) {
-                saveToCsvFile(saveToCsvFile, records.stream());
+                Util.saveToCsvFile(saveToCsvFile, records.stream());
             }
 
             if (discardToCsvFile != null) {
-                saveToCsvFile(discardToCsvFile, rmb.getDiscardedRecords());
+                Util.saveToCsvFile(discardToCsvFile, mrpb.getDiscardedRecords());
             }
 
             return 0;
@@ -194,22 +199,11 @@ public class Main implements Callable<Integer> {
         }
     }
 
-    private static void saveToCsvFile(Path path, Stream<Record> records) throws
-            IOException {
-        RecordsSerializer serializer = RecordsSerializer.csv().withCsvHeader();
-        if ("--".equals(path.toString())) {
-            serializer.saveToStream(records, System.out);
-        } else {
-            serializer.saveToFile(records, path);
-        }
-    }
-
     private boolean findOverlappedStatements(Stream<Record> records) {
         if (!checkOverlappedStatements) {
             return false;
         }
-        Collection<Entry<String, String>> overlappedStatements = new StatementOverlapFinder().apply(
-                records);
+        var overlappedStatements = new StatementOverlapFinder().apply(records);
         if (overlappedStatements != null && !overlappedStatements.isEmpty()) {
             for (var pair : overlappedStatements) {
                 System.err.println(String.format(

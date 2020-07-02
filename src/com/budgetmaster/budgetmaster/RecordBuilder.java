@@ -1,5 +1,7 @@
 package com.budgetmaster.budgetmaster;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.LocalDate;
 import java.util.Currency;
 import java.util.HashSet;
@@ -11,13 +13,13 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public final class RecordBuilder {
-    Record create() {
+    public Record create() {
         return new Record(transactionDate, postingDate, filterSting(desc),
                 filterAmount(), filterSting(category), currency, source,
                 filterSting(id), tags);
     }
 
-    static RecordBuilder from(Record record) {
+    public static RecordBuilder from(Record record) {
         return new RecordBuilder()
                 .setAmount(record.getAmount())
                 .setDescription(record.getDescription())
@@ -30,44 +32,44 @@ public final class RecordBuilder {
                 .setSource(record.getSource());
     }
 
-    LocalDate getTransactionDate() {
+    public LocalDate getTransactionDate() {
         return transactionDate;
     }
 
-    RecordBuilder setTransactionDate(LocalDate v) {
+    public RecordBuilder setTransactionDate(LocalDate v) {
         transactionDate = v;
         return this;
     }
 
-    LocalDate getPostingDate() {
+    public LocalDate getPostingDate() {
         return postingDate;
     }
 
-    RecordBuilder setPostingDate(LocalDate v) {
+    public RecordBuilder setPostingDate(LocalDate v) {
         postingDate = v;
         return this;
     }
 
-    String getDescription() {
+    public String getDescription() {
         return desc;
     }
 
-    RecordBuilder setDescription(String v) {
+    public RecordBuilder setDescription(String v) {
         desc = v;
         return this;
     }
 
-    String[] getTags() {
+    public String[] getTags() {
         return tags;
     }
 
-    RecordBuilder setTags(String[] v) {
+    public RecordBuilder setTags(String[] v) {
         tags = v;
         validateTags();
         return this;
     }
 
-    RecordBuilder addTag(String v) {
+    public RecordBuilder addTag(String v) {
         validateTag(v);
         Set<String> newTags = new HashSet<>();
         if (tags != null) {
@@ -78,66 +80,71 @@ public final class RecordBuilder {
         return this;
     }
 
-    String getId() {
+    public String getId() {
         return id;
     }
 
-    RecordBuilder setId(String v) {
+    public RecordBuilder setId(String v) {
         id = v;
         return this;
     }
 
-    Currency getCurrency() {
+    public Currency getCurrency() {
         return currency;
     }
 
-    RecordBuilder setCurrency(Currency v) {
+    public RecordBuilder setCurrency(Currency v) {
         currency = v;
         return this;
     }
 
-    String getCategory() {
+    public String getCategory() {
         return category;
     }
 
-    RecordBuilder setCategory(String v) {
+    public RecordBuilder setCategory(String v) {
         category = v;
         return this;
     }
 
-    Statement getSource() {
+    public Statement getSource() {
         return source;
     }
 
-    RecordBuilder setSource(Statement v) {
+    public RecordBuilder setSource(Statement v) {
         source = v;
         return this;
     }
 
-    String getAmount() {
+    public BigDecimal getAmount() {
         return amount;
     }
 
-    RecordBuilder setAmount(String v) {
+    public RecordBuilder setAmount(BigDecimal v) {
         amount = v;
         return this;
     }
 
-    RecordBuilder negateAmount(boolean v) {
+    public RecordBuilder setAmount(String v) {
+        amount = MonetaryAmount.of(v);
+        return this;
+    }
+
+    public RecordBuilder negateAmount(boolean v) {
         negateAmount = v;
         return this;
     }
 
-    RecordBuilder negateAmount() {
+    public RecordBuilder negateAmount() {
         return negateAmount(true);
     }
 
-    RecordBuilder strip(boolean v) {
+    public RecordBuilder strip(boolean v) {
         strip = v;
         return this;
     }
 
-    RecordBuilder strip() {
+    public RecordBuilder strip() {
         return strip(true);
     }
 
@@ -148,8 +155,12 @@ public final class RecordBuilder {
         return v;
     }
 
-    private String filterAmount() {
-        return MonetaryAmountNormalizer.negate(negateAmount).normalize(amount);
+    private BigDecimal filterAmount() {
+        if (negateAmount) {
+            return amount.negate();
+        } else {
+            return amount;
+        }
     }
 
     private static void validateTag(String v) {
@@ -173,13 +184,13 @@ public final class RecordBuilder {
     private String desc;
     private String category;
     private Statement source;
-    private String amount;
+    private BigDecimal amount;
     private Currency currency;
     private String id;
     private String[] tags;
 
     public enum Setter {
-        Amount((rb, v) -> rb.setAmount((String)v)),
+        Amount((rb, v) -> rb.setAmount((BigDecimal)v)),
         Description((rb, v) -> rb.setDescription((String)v)),
         Currency((rb, v) -> rb.setCurrency((Currency)v)),
         Category((rb, v) -> rb.setCategory((String)v)),

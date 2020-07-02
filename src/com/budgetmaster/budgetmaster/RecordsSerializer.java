@@ -14,7 +14,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -177,7 +176,7 @@ final class RecordsSerializer {
         setFieldValue(recordFields, Field.PostingDate,
                 () -> record.getPostingDate().format(dateFormat));
         setFieldValue(recordFields, Field.Id, () -> record.getId());
-        setFieldValue(recordFields, Field.Amount, () -> record.getAmount());
+        setFieldValue(recordFields, Field.Amount, () -> record.getAmount().toPlainString());
         setFieldValue(recordFields, Field.Category, () -> record.getCategory());
         setFieldValue(recordFields, Field.Currency, () -> record.getCurrencyCode());
         setFieldValue(recordFields, Field.Description,

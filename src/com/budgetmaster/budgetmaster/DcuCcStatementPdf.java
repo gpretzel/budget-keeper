@@ -99,14 +99,13 @@ final class DcuCcStatementPdf extends AccountStatementPdf {
         text.set(EOL + "Starting Balance", EOL);
 
         paymentsChecksum = createRecordChecksum(text, "Payments",
-                "Other Credits", new MonetaryAmountNormalizer());
+                "Other Credits");
 
         // Extract from
         // Statement Closing Date 01/10/18
         String endingPeriodStr = text.set(EOL + "Statement Closing Date", EOL).getStrippedValue();
 
-        purchasesChecksum = createRecordChecksum(text, "Purchases",
-                null, new MonetaryAmountNormalizer());
+        purchasesChecksum = createRecordChecksum(text, "Purchases", null);
 
         String daysInPeriodStr = text.set(EOL + "Days in Period", EOL).getStrippedValue();
 
@@ -129,18 +128,15 @@ final class DcuCcStatementPdf extends AccountStatementPdf {
         }
     }
 
-    private static BalanceChecksum createRecordChecksum(TextFrame text, String main,
-            String other, MonetaryAmountNormalizer normalizer) {
-        final BigDecimal mainAmount = getChecksumValue(text, EOL + main,
-                normalizer);
+    private static BalanceChecksum createRecordChecksum(TextFrame text, String main, String other) {
+        final BigDecimal mainAmount = getChecksumValue(text, EOL + main);
 
         LOGGER.finest(String.format("%s amount: [%s]", main, mainAmount));
 
         final BigDecimal totalAmount;
 
         if (other != null) {
-            final BigDecimal otherAmount = getChecksumValue(text, EOL + other,
-                    normalizer);
+            final BigDecimal otherAmount = getChecksumValue(text, EOL + other);
             if (otherAmount.compareTo(BigDecimal.ZERO) != 0) {
                 LOGGER.finest(String.format("%s amount: [%s]", other, otherAmount));
                 totalAmount = mainAmount.add(otherAmount);
@@ -154,10 +150,9 @@ final class DcuCcStatementPdf extends AccountStatementPdf {
         return new BalanceChecksum(totalAmount);
     }
 
-    private static BigDecimal getChecksumValue(TextFrame text, String begin,
-            MonetaryAmountNormalizer norm) {
+    private static BigDecimal getChecksumValue(TextFrame text, String begin) {
         String checksumText = text.set(begin, EOL).getStrippedValue();
-        return new BigDecimal(norm.normalize(checksumText));
+        return MonetaryAmount.of(checksumText);
     }
 
     @Override

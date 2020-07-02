@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 
-public abstract class AccountStatementPdf implements RecordSupplier {
+public abstract class AccountStatementPdf implements RecordsSupplier {
     @Override
     public Stream<Record> read(Path pdfFile) throws IOException {
         PdfTextExtractor textExtractor = new PdfTextExtractor();

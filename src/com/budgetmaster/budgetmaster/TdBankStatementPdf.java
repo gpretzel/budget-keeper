@@ -69,12 +69,10 @@ final class TdBankStatementPdf extends AccountStatementPdf {
     }
 
     private static BalanceChecksum createBalanceChecksum(TextFrame text) {
-        BigDecimal beginBalance = new BigDecimal(
-                new MonetaryAmountNormalizer().normalize(text.set(EOL
-                        + "Beginning Balance", EOL).getStrippedValue()));
-        BigDecimal endBalance = new BigDecimal(
-                new MonetaryAmountNormalizer().normalize(text.set(EOL
-                        + "Ending Balance", EOL).getStrippedValue()));
+        BigDecimal beginBalance = MonetaryAmount.of(text.set(EOL
+                + "Beginning Balance", EOL).getStrippedValue());
+        BigDecimal endBalance = MonetaryAmount.of(text.set(EOL
+                + "Ending Balance", EOL).getStrippedValue());
 
         return new BalanceChecksum(beginBalance.subtract(endBalance));
     }

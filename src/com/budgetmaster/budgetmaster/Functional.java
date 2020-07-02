@@ -1,6 +1,7 @@
 package com.budgetmaster.budgetmaster;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -58,6 +59,23 @@ public class Functional {
     }
 
     @FunctionalInterface
+    public interface ThrowingBiFunction<T,U, R> {
+        R apply(T t, U u) throws Exception;
+
+        public static <T, U, R> BiFunction<T, U, R> toBiFunction(ThrowingBiFunction<T, U, R> v) {
+            return (t, u) -> {
+                try {
+                    return v.apply(t, u);
+                } catch (Exception ex) {
+                    rethrowUnchecked(ex);
+                }
+                // Unreachable
+                return null;
+            };
+        }
+    }
+
+    @FunctionalInterface
     public interface ThrowingRunnable {
         void run() throws Exception;
 
@@ -89,6 +107,15 @@ public class Functional {
     }
 
     public static <T, R> Function<T, R> identityFunction(Function<T, R> v) {
+        return v;
+    }
+
+    public static <T, U, R> BiFunction<T, U, R> identity(BiFunction<T, U, R> v) {
+        return v;
+    }
+
+    public static <T, U, R> BiFunction<T, U, R> identityBiFunction(
+            BiFunction<T, U, R> v) {
         return v;
     }
 

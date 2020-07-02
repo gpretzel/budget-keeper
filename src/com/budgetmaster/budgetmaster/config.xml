@@ -20,15 +20,15 @@
   <matcher id="TD_CC">
       <field name="Statement-id" regexp="TD Bank credit card statement"/>
   </matcher>
-  
+
   <matcher id="TD">
       <field name="Statement-id" regexp="TD Bank account statement"/>
   </matcher>
-  
+
   <matcher id="DCU">
       <field name="Statement-id" regexp="DCU Bank account statement"/>
   </matcher>
-  
+
   <matcher id="final">
       <tag>final</tag>
   </matcher>
@@ -64,14 +64,38 @@
       <discard/>
     </action>
   </pass>
-  
-  <pass id="merge-with-paypal">
+
+  <pass class="com.budgetmaster.budgetmaster.paypal.PayPalRecordsMapperBuilder"
+        id="merge-with-paypal">
+    <matcher>
+      <description>\bPAYPAL\b</description>
+    </matcher>
+    <date-diff-days>10</date-diff-days>
+    <source-csv>${PAYPAL_CSV}</source-csv>
+    <source-csv>C:\Users\asemenyu\Downloads\$\paypal\paypal.csv</source-csv>
+    <unclaimed-collector-csv>${PAYPAL_UNCLAIMED_CSV}</unclaimed-collector-csv>
+    <unclaimed-collector-csv>--</unclaimed-collector-csv>
+  </pass>
+
+  <pass id="discard-matched-paypal-records">
     <action>
       <matcher>
-        <description>\bPAYPAL\b</description>
+        <tag>paypal</tag>
       </matcher>
-      <merge-with-paypal/>
+      <discard/>
     </action>
+  </pass>
+
+  <pass class="com.budgetmaster.budgetmaster.amazon.AmazonRecordsMapperBuilder"
+        id="merge-with-amazon">
+    <matcher>
+      <description>\b(AMAZON|AMZN)\b</description>
+    </matcher>
+    <date-diff-days>10</date-diff-days>
+    <orders-csv>${AMAZON_ORDERS_CSV}</orders-csv>
+    <refunds-csv>${AMAZON_REFUNDS_CSV}</refunds-csv>
+    <unclaimed-orders-collector-csv>${AMAZON_UNCLAIMED_ORDERS_CSV}</unclaimed-orders-collector-csv>
+    <unclaimed-refunds-collector-csv>${AMAZON_UNCLAIMED_REFUNDS_CSV}</unclaimed-refunds-collector-csv>
   </pass>
 
   <pass id="main">
@@ -92,7 +116,7 @@
       <tag>final</tag>
       <category>бензин</category>
     </action>
-    
+
     <action>
       <matcher>
         <description>^David Aitcheson$</description>
@@ -109,7 +133,7 @@
       <tag>final</tag>
       <category>цивик</category>
     </action>
-    
+
     <action>
       <matcher>
         <matcher ref="DCU"/>
@@ -153,7 +177,7 @@
       <category>алкоголь</category>
       <description>Попил пиво после гонок в Ньюпорте</description>
     </action>
-    
+
     <action>
       <matcher>
         <description>^MARATHON SPORTS\b</description>
@@ -161,7 +185,7 @@
       <tag>final</tag>
       <category>спорт</category>
     </action>
-    
+
     <action>
       <matcher>
         <description>\bWINE\b</description>
@@ -198,7 +222,7 @@
       <category>покушал</category>
       <description>Фортиссимо в Сомервиле</description>
     </action>
-    
+
     <action>
       <matcher>
         <description>^SUBWAY\b</description>
@@ -246,7 +270,7 @@
       <category>доход</category>
       <description>Проценты по сберегательному счету DCU</description>
     </action>
-    
+
     <action>
       <matcher>
         <description>^(WEST MARINE|INTENSITYSAILS|NAUTOS-USA LLC|Vela Sailing Supply|West Coast Sailing|Discount Marine Supplies)\b</description>
@@ -254,7 +278,7 @@
       <tag>final</tag>
       <category>яхтинг</category>
     </action>
-    
+
     <action>
       <matcher>
         <description>^David Kahn$</description>
@@ -264,7 +288,7 @@
       <category>яхтинг</category>
       <description>Платил за лазер #188122 David Kahn</description>
     </action>
-    
+
     <action>
       <matcher>
         <description>^Newport Laser Fleet, Inc.$</description>
@@ -274,7 +298,7 @@
       <category>яхтинг</category>
       <description>Гонки в Ньюпорте</description>
     </action>
-    
+
     <action>
       <matcher>
         <description>^REGATTA NETWORK$\b</description>
@@ -283,7 +307,7 @@
       <category>яхтинг</category>
       <description>За регату (не помню какую)</description>
     </action>
-    
+
     <action>
       <matcher>
         <description>\bTHE UPS STORE\b</description>
@@ -294,37 +318,37 @@
     </action>
 
   </pass>
-  
+
   <matcher id="shopping">
     <or>
       <description>\b(AMAZON|AMZN)\b</description>
       <category>^SHOPPING$</category>
     </or>
   </matcher>
-      
+
   <filter-excludings id="filter-excludings">
     <matcher>
       <matcher ref="shopping"/>
       <not><matcher ref="final"/></not>
-    </matcher>    
+    </matcher>
     <!--
       Maximum distance between two matching transactions in days.
     -->
     <period-days>100</period-days>
-    <!-- 
-      The first of matching transactions should be adding to the balance. 
-      The second of matching transactions should be removing from the balance. 
+    <!--
+      The first of matching transactions should be adding to the balance.
+      The second of matching transactions should be removing from the balance.
     -->
     <refund/>
-    <!-- <negate/> -->
+    <negate/>
   </filter-excludings>
-  
+
   <filter-excludings id="filter-excludings-2">
     <matcher>
       <not><matcher ref="shopping"/></not>
       <not><matcher ref="final"/></not>
     </matcher>
-    <!-- <negate/> -->
+    <negate/>
   </filter-excludings>
 
 </config>
