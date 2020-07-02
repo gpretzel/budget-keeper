@@ -33,12 +33,12 @@ public class PayPalRecordsMapperBuilder extends MarketplaceTransactionsBuilder<R
     @Override
     public void initFromXml(Element root) throws IOException {
         super.initFromXml(root);
-        
+
         String text = Util.readLastElement(root, "source-csv");
         if (text != null) {
             inputPayPalCsvFile = Path.of(text);
         }
-        
+
         text = Util.readLastElement(root, "unclaimed-collector-csv");
         if (text != null) {
             unclaimedPayPalCsvFile = Path.of(text);

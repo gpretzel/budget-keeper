@@ -70,7 +70,8 @@
     <matcher>
       <description>\bPAYPAL\b</description>
     </matcher>
-    <date-diff-days>10</date-diff-days>
+    <date-diff-days>5</date-diff-days>
+    <amount-diff>0.1</amount-diff>
     <source-csv>${PAYPAL_CSV}</source-csv>
     <source-csv>C:\Users\asemenyu\Downloads\$\paypal\paypal.csv</source-csv>
     <unclaimed-collector-csv>${PAYPAL_UNCLAIMED_CSV}</unclaimed-collector-csv>

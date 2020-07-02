@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <config>
-  <parser class="com.budgetmaster.budgetmaster.PayPalStatementCsv" id="PayPal statement">
+  <parser class="com.budgetmaster.budgetmaster.paypal.PayPalStatementCsv" id="PayPal statement">
     <path-matcher>glob:**/*.csv</path-matcher>
   </parser>
-  
+
   <pass>
     <action>
       <matcher>
-        <category>\bPayment$</category>
+        <category>\b(Payment|Refund)$</category>
       </matcher>
       <negation/>
       <tag>paypal</tag>

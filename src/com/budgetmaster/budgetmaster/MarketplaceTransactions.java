@@ -11,6 +11,7 @@ import java.util.Comparator;
 import java.util.Currency;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -19,7 +20,6 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -28,7 +28,7 @@ public final class MarketplaceTransactions<T> {
     public final static int MAX_MATCH_SCORE = 1000;
     public final static int MIN_MATCH_SCORE = 0;
 
-    public static final class Match<T> {
+    public final class Match {
         Match(int score, Record key, T value) {
             if (score <= MIN_MATCH_SCORE) {
                 throw new IllegalArgumentException(String.format(
@@ -55,7 +55,20 @@ public final class MarketplaceTransactions<T> {
 
         @Override
         public String toString() {
-            return String.format("score=%d; key=%s; value=%s", score, key, value);
+            final BigDecimal amountDiff = getAmount(key).subtract(getAmount(
+                    value));
+            final long daysDiff = ChronoUnit.DAYS.between(getDate(key), getDate(
+                    value));
+
+            StringBuilder sb = new StringBuilder();
+            if (amountDiff.compareTo(BigDecimal.ZERO) != 0) {
+                sb.append(String.format(" amount-diff=%s;", amountDiff));
+            }
+            if (daysDiff != 0) {
+                sb.append(String.format(" days-diff=%s;", daysDiff));
+            }
+            return String.format("score=%d;%s key=%s; value=%s", score, sb, key,
+                    value);
         }
 
         private final Record key;
@@ -102,14 +115,13 @@ public final class MarketplaceTransactions<T> {
     }
 
     public Stream<Record> filterRecords(Stream<Record> records,
-            Function<Match<T>, Record> merger) {
+            Function<Match, Record> merger) {
         Map<T, List<Record>> mappedEntries = new HashMap<>();
-        Map<Record, MatchInternal> matches = new HashMap<>();
+        Map<Record, MatchInternal> matches = new LinkedHashMap<>();
 
         Consumer<Record> initializer = record -> {
             MatchInternal match = findTransaction(record);
             if (match != null) {
-                matches.put(record, match);
                 if (match.isFullMatch()) {
                     match.removeValue();
                 } else {
@@ -120,31 +132,35 @@ public final class MarketplaceTransactions<T> {
                     }
                 }
             }
+            matches.put(record, match);
         };
 
-        records = records.sequential().peek(initializer);
+        // Collect all matches.
+        records.forEachOrdered(initializer);
 
-        // Do the actual merge.
-        return records.map(record -> {
-            MatchInternal match = matches.get(record);
-            if (match != null) {
-                if (match.isFullMatch()) {
-                    record = merger.apply(match.createMatch(record));
-                } else {
-                    List<Record> candidates = mappedEntries.get(match.getValue());
+        // Resorve match collisions.
+        matches.values().forEach(match -> {
+            if (match != null && !match.isFullMatch()) {
+                List<Record> candidates = mappedEntries.get(match.getValue());
+                if (candidates != null) {
                     Record bestMatch = Collections.max(candidates,
                             (x, y) -> calculateMatchScore(match.getValue(), x)
                             - calculateMatchScore(match.getValue(), y));
-                    if (bestMatch == record) {
-                        record = merger.apply(match.createMatch(record));
-                    }
                     match.removeValue();
+                    mappedEntries.remove(match.getValue());
                     candidates.stream()
                             .filter(Predicate.not(bestMatch::equals))
                             .forEach(initializer);
                 }
             }
-            return record;
+        });
+
+        // Apply matches.
+        return matches.entrySet().stream().map(e -> {
+            if (e.getValue() != null) {
+                return merger.apply(e.getValue().createMatch(e.getKey()));
+            }
+            return e.getKey();
         });
     }
 
@@ -166,12 +182,13 @@ public final class MarketplaceTransactions<T> {
         BigDecimal bAmount = getAmount(b);
         BigDecimal amountDelta = aAmount.subtract(bAmount).abs();
 
-        final double amountMatchScore = 1.0 - amountDelta.divide(aAmount.max(
+        final double amountMatchDiff = amountDelta.divide(aAmount.max(
                 bAmount), RoundingMode.HALF_UP).doubleValue();
-
-        if (amountMatchScore < maxAmountDiff) {
+        if (amountMatchDiff > maxAmountDiff) {
             return MIN_MATCH_SCORE;
         }
+
+        final double amountMatchScore = 1.0 - amountMatchDiff;
 
         final long daysDiff = Math.abs(ChronoUnit.DAYS.between(getDate(a),
                 getDate(b)));
@@ -180,8 +197,8 @@ public final class MarketplaceTransactions<T> {
             return MIN_MATCH_SCORE;
         }
 
-        final double dateMatchScore = 1.0 - ((double) daysDiff) / Math.max(
-                maxDaysDiff, 1);
+        final double dateMatchScore = 1.0 - ((double) daysDiff) / (maxDaysDiff
+                + 1);
 
         return (int) (MIN_MATCH_SCORE + amountMatchScore * dateMatchScore
                 * (MAX_MATCH_SCORE - MIN_MATCH_SCORE));
@@ -271,15 +288,29 @@ public final class MarketplaceTransactions<T> {
 
             return transactions.stream()
             .map(t -> new MatchInternal(t, calculateMatchScore(t, key), this))
+            .filter(m -> m.getMatchScore() != 0)
             .max((x, y) -> Math.max(x.getMatchScore(), y.getMatchScore()))
             .orElse(null);
         }
 
         private int[] findAmountRange(Record key) {
             final BigDecimal theKey = getAmount(key);
+            final BigDecimal keyA = theKey.multiply(new BigDecimal(1.0
+                    - maxAmountDiff));
+            final BigDecimal keyB = theKey.multiply(new BigDecimal(1.0
+                    + maxAmountDiff));
+            final BigDecimal leftKey, rightKey;
+            if (theKey.compareTo(BigDecimal.ZERO) > 0) {
+                leftKey = keyA;
+                rightKey = keyB;
+            } else {
+                leftKey = keyB;
+                rightKey = keyA;
+            }
+
             return findRange(
-                    theKey.multiply(new BigDecimal(1.0 - maxAmountDiff)),
-                    theKey.multiply(new BigDecimal(1.0 + maxAmountDiff)),
+                    leftKey,
+                    rightKey,
                     (x, y) -> getAmount(x).compareTo(getAmount(y)),
                     amountSorted);
         }
@@ -324,8 +355,8 @@ public final class MarketplaceTransactions<T> {
             }
         }
 
-        Match<T> createMatch(Record key) {
-            return new Match<>(score, key, value);
+        Match createMatch(Record key) {
+            return new Match(score, key, value);
         }
 
         private final T value;

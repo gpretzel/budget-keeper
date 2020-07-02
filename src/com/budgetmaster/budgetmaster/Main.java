@@ -29,7 +29,9 @@ public class Main implements Callable<Integer> {
     private static final Logger LOGGER = Logger.getLogger(
             MethodHandles.lookup().lookupClass().getName());
 
-    @Option(names = {"-c", "--config"}, description = "path to config XML file")
+    @Option(names = {"-c", "--config"},
+            required = true,
+            description = "path to config XML file")
     private Path configXmlFile;
 
     @Option(names = {"-s", "--save-collector"},
@@ -101,17 +103,19 @@ public class Main implements Callable<Integer> {
         StatementReaderBuilder rsfb = new StatementReaderBuilder();
         MainRecordsProcessorBuilder mrpb = new MainRecordsProcessorBuilder();
 
-        mrpb.setVaribales(Stream.of(variables).map(str -> {
-            int sepIdx = str.indexOf('=');
-            if (sepIdx < 0) {
-                throw new IllegalArgumentException(String.format(
-                        "Invalid variable value: [%s]. Missing '=' character",
-                        str));
-            }
-            String name = str.substring(0, sepIdx);
-            String value = str.substring(sepIdx + 1);
-            return Map.entry(name, value);
-        }).collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue())));
+        if (variables != null) {
+            mrpb.setVaribales(Stream.of(variables).map(str -> {
+                int sepIdx = str.indexOf('=');
+                if (sepIdx < 0) {
+                    throw new IllegalArgumentException(String.format(
+                            "Invalid variable value: [%s]. Missing '=' character",
+                            str));
+                }
+                String name = str.substring(0, sepIdx);
+                String value = str.substring(sepIdx + 1);
+                return Map.entry(name, value);
+            }).collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue())));
+        }
 
         if (discardToCsvFile != null) {
             mrpb.collectDiscardedRecords(true);

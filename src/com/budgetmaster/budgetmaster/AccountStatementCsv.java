@@ -16,7 +16,7 @@ import org.apache.commons.csv.CSVRecord;
 
 public abstract class AccountStatementCsv implements RecordsSupplier {
     @Override
-    final public Stream<Record> read(Path csvFilePath) throws IOException {
+    public Stream<Record> read(Path csvFilePath) throws IOException {
         final Map<RecordBuilder.Setter, Enum<?>> fieldMapper = fieldMapper();
 
         return new CsvReader<Record>()
