@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+  <parser class="com.budgetmaster.budgetmaster.DcuStatementPdf" id="DCU Bank account statement" currency="USD">
+    <path-matcher>glob:**/dcu/*.pdf</path-matcher>
+  </parser>
+  <parser class="com.budgetmaster.budgetmaster.DcuCcStatementPdf" id="DCU credit card statement" currency="USD">
+    <path-matcher>glob:**/dcu_cc/*.pdf</path-matcher>
+  </parser>
+  <parser class="com.budgetmaster.budgetmaster.TdBankCcStatementCsv" id="TD Bank credit card statement" currency="USD">
+    <path-matcher>glob:**/tdbank_cc/*.csv</path-matcher>
+  </parser>
+  <parser class="com.budgetmaster.budgetmaster.TdBankStatementPdf" id="TD Bank account statement" currency="USD">
+    <path-matcher>glob:**/tdbank/*.pdf</path-matcher>
+  </parser>
+
+  <matcher id="shopping">
+    <or>
+      <description>\b(AMAZON|AMZN)\b</description>
+      <category>^SHOPPING$</category>
+    </or>
+  </matcher>
+  
+  <pass id="test">
+    <action>
+      <matcher>
+        <matcher ref="shopping"/>
+      </matcher>    
+    </action>
+    <action><discard/></action>
+  </pass>
+
+</config>
