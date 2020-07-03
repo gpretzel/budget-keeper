@@ -3,13 +3,13 @@ package com.budgetmaster.budgetmaster;
 import java.util.Objects;
 
 
-final class TextFrame {
-    TextFrame(String v) {
+public final class TextFrame {
+    public TextFrame(String v) {
         Objects.requireNonNull(v);
         this.data = v;
     }
 
-    TextFrame set(String from, String to) {
+    public TextFrame set(String from, String to) {
         Objects.requireNonNull(from);
         Objects.requireNonNull(to);
 
@@ -32,11 +32,11 @@ final class TextFrame {
         return this;
     }
 
-    String getValue() {
+    public String getValue() {
         return data.substring(begin, end);
     }
 
-    String getStrippedValue() {
+    public String getStrippedValue() {
         return getValue().strip();
     }
 

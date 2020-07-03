@@ -5,11 +5,17 @@ import java.lang.invoke.MethodHandles;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.function.Function;
-import java.util.function.UnaryOperator;
+import java.util.function.Predicate;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -24,45 +30,21 @@ import picocli.CommandLine.Parameters;
         description = "Extracts and filters transactions from different banck account statements",
         name = "budgetmaster", mixinStandardHelpOptions = true,
         version = "budgetmaster 0.1")
-public class Main implements Callable<Integer> {
+final class Main implements Callable<Integer> {
+    public static void main(String... args) throws Exception {
+        LogManager.getLogManager().readConfiguration();
+        int exitCode = new CommandLine(new Main()).execute(args);
+        System.exit(exitCode);
+    }
 
-    private static final Logger LOGGER = Logger.getLogger(
-            MethodHandles.lookup().lookupClass().getName());
-
-    @Option(names = {"-c", "--config"},
-            required = true,
-            description = "path to config XML file")
-    private Path configXmlFile;
-
-    @Option(names = {"-s", "--save-collector"},
-            description = "path to CSV file where to save filtered records")
-    private Path saveToCsvFile;
-
-    @Option(names = {"-r", "--discard-collector"},
-            description = "path to CSV file where to save discarded records")
-    private Path discardToCsvFile;
-
-    @Option(names = {"-d", "--dry-run"}, description = "dry run")
-    private boolean dryRun;
-
-    @Option(names = {"--check-overlapped-statements"}, description = "dry run")
-    private boolean checkOverlappedStatements;
-
-    @Option(names = {"-i", "--action-ids"},
-            description = "ordered list of IDs of actions to execute from the config file")
-    private String[] actionIds;
-
-    @Option(names = {"-e", "--set-variable"},
-            description = "set variable")
-    private String[] variables;
-
-    @Option(names = {"-a", "--fail-fast"},
-            description = "abort after the first encountered error")
-    private boolean failFast;
-
-    @Parameters(paramLabel = "FILE",
-            description = "one ore more statemnet files/directories to process")
-    private Path[] statementPaths;
+    @Override
+    public Integer call() throws Exception {
+        try {
+            return workload();
+        } catch (Functional.ExceptionBox ex) {
+            throw (Exception)ex.getCause();
+        }
+    }
 
     private static Path[] explodePaths(Path[] paths) throws IOException {
         List<Path> result = new ArrayList<>();
@@ -79,21 +61,6 @@ public class Main implements Callable<Integer> {
         }
 
         return result.toArray(Path[]::new);
-    }
-
-    public static void main(String... args) throws Exception {
-        LogManager.getLogManager().readConfiguration();
-        int exitCode = new CommandLine(new Main()).execute(args);
-        System.exit(exitCode);
-    }
-
-    @Override
-    public Integer call() throws Exception {
-        try {
-            return workload();
-        } catch (Functional.ExceptionBox ex) {
-            throw (Exception)ex.getCause();
-        }
     }
 
     private int workload() throws Exception {
@@ -125,49 +92,82 @@ public class Main implements Callable<Integer> {
 
         Path[] filteredStatementPaths = explodePaths(statementPaths);
 
-        Function<Path, Statement> statementCfg = rsfb.createFromXml(configXml);
+        statementCfg = rsfb.createFromXml(configXml);
         RecordsMapper recordsMapper = mrpb.createFromXml(
                 configXml.getDocumentElement());
 
-        List<Record> records = new ArrayList<>();
+        long totalRecords = -1;
+        long keptRecords = -1;
+        long processed = -1;
+        long failed = -1;
+        long ignored = -1;
 
-        long totalRecords = 0;
+        switch (maxStatementHarvestJobCount) {
+            case 0:
+                statementHarvestJobExecutor = Executors.newWorkStealingPool();
+                break;
 
-        int processed = 0;
-        int failed = 0;
-        int ignored = 0;
+            case 1:
+                statementHarvestJobExecutor = Executors.newSingleThreadExecutor();
+                break;
+
+            default:
+                statementHarvestJobExecutor = Executors.newFixedThreadPool(
+                        maxStatementHarvestJobCount);
+                break;
+        }
+
         try {
-            for (Path path : filteredStatementPaths) {
-                Statement statement = statementCfg.apply(path);
-                if (statement == null) {
-                    ignored++;
-                    LOGGER.warning(String.format(
-                            "Failed to find harvester for [%s] input file", path));
-                } else {
-                    try {
-                        LOGGER.finer(String.format(
-                                "Process [%s] input file with %s harvester",
-                                path, statement.getId()));
-                        if (!dryRun) {
-                            records.addAll(statement.get().collect(Collectors.toList()));
+            List<Future<List<Record>>> statements = statementHarvestJobExecutor.invokeAll(
+                    Stream.of(filteredStatementPaths)
+                            .map(StatementHarvestJob::new)
+                            .collect(Collectors.toList()));
+            failed = statements.stream()
+                    .filter(Predicate.not(Future::isCancelled))
+                    .filter(f -> {
+                        try {
+                            f.get();
+                            return false;
+                        } catch (InterruptedException | ExecutionException ex) {
+                            return true;
                         }
-                        processed++;
-                    } catch (Exception ex) {
-                        failed++;
-                        String errMsg = String.format(
-                                "Error harvesting [%s] input file", path);
-                        LOGGER.severe(String.format("%s: %s", errMsg,
-                                ex.getMessage()));
-                        System.out.println(errMsg);
-                        ex.printStackTrace();
-                        if (failFast) {
-                            return 1;
+                    })
+                    .count();
+
+            ignored = statements.stream()
+                    .filter(Predicate.not(Future::isCancelled))
+                    .filter(f -> {
+                        try {
+                            return f.get() == null;
+                        } catch (InterruptedException | ExecutionException ex) {
+                            return false;
                         }
-                    }
+                    })
+                    .count();
+
+            List<List<Record>> harvestedStatements = statements.stream()
+                    .filter(Predicate.not(Future::isCancelled))
+                    .map(f -> {
+                        try {
+                            return f.get();
+                        } catch (InterruptedException | ExecutionException ex) {
+                            return null;
+                        }
+                    })
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            processed = harvestedStatements.size();
+
+            List<Record> records = harvestedStatements.stream().flatMap(
+                    x -> x.stream()).collect(Collectors.toList());
+
+            totalRecords = keptRecords = records.size();
+
+            if (statements.stream().anyMatch(Future::isCancelled) || failed > 0) {
+                if (failFast) {
+                    return 1;
                 }
             }
-
-            totalRecords = records.size();
 
             if (findOverlappedStatements(records.stream())) {
                 if (failFast) {
@@ -180,6 +180,8 @@ public class Main implements Callable<Integer> {
                     .collect(Collectors.toList());
             recordsMapper.onRecordsProcessed();
 
+            keptRecords = records.size();
+
             if (saveToCsvFile != null) {
                 Util.saveToCsvFile(saveToCsvFile, records.stream());
             }
@@ -190,13 +192,12 @@ public class Main implements Callable<Integer> {
 
             return 0;
         } finally {
-            final int notProcessed = filteredStatementPaths.length - (processed
+            final long notProcessed = filteredStatementPaths.length - (processed
                     + failed + ignored);
             System.out.println(String.format(
                     "Total input files count: %d; success: %d; failed: %d; unrecognized: %d; skipped: %d",
                     filteredStatementPaths.length, processed, failed, ignored,
                     notProcessed));
-            long keptRecords = records.size();
             System.out.println(String.format(
                     "Total records harvested: %d; kept: %d; discarded: %d",
                     totalRecords, keptRecords, totalRecords - keptRecords));
@@ -218,4 +219,88 @@ public class Main implements Callable<Integer> {
         }
         return false;
     }
+
+    private final class StatementHarvestJob implements Callable<List<Record>> {
+        StatementHarvestJob(Path src) {
+            this.statement = statementCfg.apply(src);
+            if (statement == null) {
+                LOGGER.warning(String.format(
+                        "Failed to find harvester for [%s] input file", src));
+            }
+            this.src = src;
+        }
+
+        @Override
+        public List<Record> call() throws Exception {
+            try {
+                LOGGER.finer(String.format(
+                        "Process [%s] input file with %s harvester", src,
+                        statement.getId()));
+                if (dryRun) {
+                    return Collections.emptyList();
+                }
+                return statement.get().collect(Collectors.toList());
+            } catch (Exception ex) {
+                String errMsg = String.format("Error harvesting [%s] input file",
+                        src);
+                LOGGER.severe(String.format("%s: %s", errMsg, ex.getMessage()));
+                System.out.println(errMsg);
+                ex.printStackTrace();
+
+                if (failFast) {
+                    statementHarvestJobExecutor.shutdownNow();
+                }
+
+                throw ex;
+            }
+        }
+
+        private final Statement statement;
+        private final Path src;
+    }
+
+    @Option(names = {"-c", "--config"},
+            required = true,
+            description = "path to config XML file")
+    private Path configXmlFile;
+
+    @Option(names = {"-j", "--jobs"},
+            description = "maximum number of bank statement harvesting jobs")
+    private int maxStatementHarvestJobCount;
+
+    @Option(names = {"-s", "--save-collector"},
+            description = "path to CSV file where to save filtered records")
+    private Path saveToCsvFile;
+
+    @Option(names = {"-r", "--discard-collector"},
+            description = "path to CSV file where to save discarded records")
+    private Path discardToCsvFile;
+
+    @Option(names = {"-d", "--dry-run"}, description = "dry run")
+    private boolean dryRun;
+
+    @Option(names = {"--check-overlapped-statements"}, description = "dry run")
+    private boolean checkOverlappedStatements;
+
+    @Option(names = {"-i", "--action-ids"},
+            description = "ordered list of IDs of actions to execute from the config file")
+    private String[] actionIds;
+
+    @Option(names = {"-e", "--set-variable"},
+            description = "set variable")
+    private String[] variables;
+
+    @Option(names = {"-a", "--fail-fast"},
+            description = "abort after the first encountered error")
+    private boolean failFast;
+
+    @Parameters(paramLabel = "FILE",
+            description = "one ore more statemnet files/directories to process")
+    private Path[] statementPaths;
+
+    private Function<Path, Statement> statementCfg;
+    private ExecutorService statementHarvestJobExecutor;
+
+    private static final Logger LOGGER = Logger.getLogger(
+            MethodHandles.lookup().lookupClass().getName());
 }

@@ -83,8 +83,8 @@ final class MainRecordsProcessorBuilder {
                 final UnaryOperator<Stream<Record>> mapper;
                 if (el.hasAttribute("class")) {
                     String className = el.getAttribute("class");
-                    RecordsMapperBuilder rmb = ThrowingSupplier.toSupplier(
-                            () -> (RecordsMapperBuilder) Class.forName(
+                    var rmb = ThrowingSupplier.toSupplier(
+                            () -> (PluggableSupplier<RecordsMapper>) Class.forName(
                                     className).getConstructor().newInstance()).get();
                     rmb.initFromXml(el);
                     Predicate<Record> recordMatcher = createRecordMatchers(el);
@@ -102,7 +102,7 @@ final class MainRecordsProcessorBuilder {
                                 .filter(recordMatcher));
                         }
 
-                        private final RecordsMapper data = rmb.create();
+                        private final RecordsMapper data = rmb.get();
                     };
                 } else {
                     UnaryOperator<Record> recordMapper = createRecordMappers(el);

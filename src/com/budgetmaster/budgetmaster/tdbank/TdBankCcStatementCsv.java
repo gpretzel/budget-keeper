@@ -1,11 +1,13 @@
-package com.budgetmaster.budgetmaster;
+package com.budgetmaster.budgetmaster.tdbank;
 
+import com.budgetmaster.budgetmaster.AccountStatementCsv;
+import com.budgetmaster.budgetmaster.RecordBuilder;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import org.apache.commons.csv.CSVFormat;
 
 
-final class TdBankCcStatementCsv extends AccountStatementCsv {
+public final class TdBankCcStatementCsv extends AccountStatementCsv {
     @Override
     protected Map<RecordBuilder.Setter, Enum<?>> fieldMapper() {
         return Map.of(

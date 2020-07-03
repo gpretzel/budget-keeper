@@ -10,7 +10,7 @@ import org.apache.pdfbox.text.PDFTextStripper;
 
 public final class PdfTextExtractor {
 
-    String extractText(Path pdfFile) throws IOException {
+    public String extractText(Path pdfFile) throws IOException {
         try (PDDocument document = PDDocument.load(pdfFile.toFile())) {
             AccessPermission ap = document.getCurrentAccessPermission();
             if (!ap.canExtractContent()) {
@@ -29,7 +29,7 @@ public final class PdfTextExtractor {
         }
     }
 
-    PdfTextExtractor setSortByPosition(boolean v) {
+    public PdfTextExtractor setSortByPosition(boolean v) {
         sortByPosition = v;
         return this;
     }

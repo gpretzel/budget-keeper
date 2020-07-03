@@ -1,5 +1,14 @@
-package com.budgetmaster.budgetmaster;
+package com.budgetmaster.budgetmaster.dcu;
 
+import com.budgetmaster.budgetmaster.AccountStatementPdf;
+import com.budgetmaster.budgetmaster.BalanceChecksum;
+import com.budgetmaster.budgetmaster.MonetaryAmount;
+import com.budgetmaster.budgetmaster.PdfTextExtractor;
+import com.budgetmaster.budgetmaster.Record;
+import com.budgetmaster.budgetmaster.RecordBuilder;
+import com.budgetmaster.budgetmaster.TextFrame;
+import com.budgetmaster.budgetmaster.TextFrameException;
+import com.budgetmaster.budgetmaster.Util;
 import static com.budgetmaster.budgetmaster.Util.EOL;
 import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
@@ -12,7 +21,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-final class DcuStatementPdf extends AccountStatementPdf {
+public final class DcuStatementPdf extends AccountStatementPdf {
     @Override
     protected void adjustPdfTextExtractor(PdfTextExtractor extractor) {
         extractor.setSortByPosition(true);

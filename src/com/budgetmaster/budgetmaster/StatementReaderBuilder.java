@@ -10,6 +10,8 @@ import java.util.Currency;
 import java.util.List;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpression;
@@ -22,48 +24,54 @@ import org.w3c.dom.NodeList;
 
 public class StatementReaderBuilder {
     Function<Path, Statement> createFromXml(Document doc) throws IOException {
-        try {
-            XPathFactory xpathfactory = XPathFactory.newInstance();
-            xpath = xpathfactory.newXPath();
+        XPathFactory xpathfactory = XPathFactory.newInstance();
+        xpath = xpathfactory.newXPath();
 
-            List<Function<Path, Statement>> parsers = new ArrayList<>();
+        List<Function<Path, Statement>> parsers = new ArrayList<>();
 
-            NodeList nodes = queryNodes("//parser", doc.getDocumentElement());
-            for (int i = 0; i < nodes.getLength(); i++) {
-                Element el = (Element) nodes.item(i);
-                parsers.add(createRecordsSupplier(el));
-            }
-
-            return (path) -> {
-                Statement result = null;
-                for (Function<Path, Statement> parser: parsers) {
-                   result = parser.apply(path);
-                   if (result != null) {
-                       break;
-                   }
-                }
-                return result;
-            };
-        } catch (XPathExpressionException ex) {
-            // Should never happen at run-time.
-            throw new RuntimeException(ex);
+        NodeList nodes = queryNodes("//parser", doc.getDocumentElement());
+        for (int i = 0; i < nodes.getLength(); i++) {
+            Element el = (Element) nodes.item(i);
+            parsers.add(createRecordsSupplier(el));
         }
+
+        return (path) -> {
+            Statement result = null;
+            for (Function<Path, Statement> parser: parsers) {
+               result = parser.apply(path);
+               if (result != null) {
+                   break;
+               }
+            }
+            return result;
+        };
     }
 
-    private static RecordsSupplier createRecordsSupplier(String clazz) {
+    private static <T> T newInstance(Class clazz) {
         try {
-            return (RecordsSupplier) Class.forName(clazz).getDeclaredConstructor().newInstance();
+            return (T) clazz.getConstructor().newInstance();
         } catch (IllegalAccessException | InstantiationException
-                | ClassNotFoundException | NoSuchMethodException
-                | SecurityException ex) {
+                | NoSuchMethodException | SecurityException ex) {
             throw new RuntimeException(ex);
         } catch (InvocationTargetException ex) {
             throw new RuntimeException(ex.getCause());
         }
     }
 
-    private Function<Path, Statement> createRecordsSupplier(Element parserEl)
-            throws XPathExpressionException {
+    private static PluggableSupplier<RecordsSupplier> createRecordsSupplierFactory(
+            String className) {
+        try {
+            Class clazz = Class.forName(className);
+            if (PluggableSupplier.class.isAssignableFrom(clazz)) {
+                return newInstance(clazz);
+            }
+            return () -> newInstance(clazz);
+        } catch (ClassNotFoundException ex) {
+            throw new RuntimeException(ex);
+        }
+    }
+
+    private Function<Path, Statement> createRecordsSupplier(Element parserEl) {
 
         List<Predicate<Path>> matchers = new ArrayList<>();
 
@@ -88,13 +96,15 @@ public class StatementReaderBuilder {
             matchers.add(pm::matches);
         }
 
-        RecordsSupplier rs = StatementReaderBuilder.this.createRecordsSupplier(clazz);
+        var rsf = createRecordsSupplierFactory(clazz);
+        rsf.initFromXml(parserEl);
 
         return (path) -> {
-            for (Predicate<Path> m: matchers) {
-               if (m.test(path)) {
-                   return Statement.fromStatementFile(id, path, currency, rs);
-               }
+            for (Predicate<Path> m : matchers) {
+                if (m.test(path)) {
+                    return Statement.fromStatementFile(id, path, currency,
+                            rsf.get());
+                }
             }
             return null;
         };
@@ -105,10 +115,13 @@ public class StatementReaderBuilder {
         return createFromXml(Util.readXml(xmlFile));
     }
 
-    private NodeList queryNodes(String xpathExpr, Element root) throws
-            XPathExpressionException {
-        XPathExpression expr = xpath.compile(xpathExpr);
-        return (NodeList) expr.evaluate(root, XPathConstants.NODESET);
+    private NodeList queryNodes(String xpathExpr, Element root) {
+        try {
+            XPathExpression expr = xpath.compile(xpathExpr);
+            return (NodeList) expr.evaluate(root, XPathConstants.NODESET);
+        } catch (XPathExpressionException ex) {
+            throw new RuntimeException(ex);
+        }
     }
 
     private XPath xpath;

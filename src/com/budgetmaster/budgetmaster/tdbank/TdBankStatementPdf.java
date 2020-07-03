@@ -1,5 +1,12 @@
-package com.budgetmaster.budgetmaster;
+package com.budgetmaster.budgetmaster.tdbank;
 
+import com.budgetmaster.budgetmaster.AccountStatementPdf;
+import com.budgetmaster.budgetmaster.BalanceChecksum;
+import com.budgetmaster.budgetmaster.MonetaryAmount;
+import com.budgetmaster.budgetmaster.Record;
+import com.budgetmaster.budgetmaster.RecordBuilder;
+import com.budgetmaster.budgetmaster.TextFrame;
+import com.budgetmaster.budgetmaster.TextFrameException;
 import static com.budgetmaster.budgetmaster.Util.EOL;
 import java.math.BigDecimal;
 import java.time.format.DateTimeFormatter;
@@ -11,7 +18,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-final class TdBankStatementPdf extends AccountStatementPdf {
+public final class TdBankStatementPdf extends AccountStatementPdf {
     @Override
     protected List<Record> parsePdfText(TextFrame text) {
         BalanceChecksum balanceChecksum = createBalanceChecksum(text);

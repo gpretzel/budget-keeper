@@ -31,7 +31,7 @@ public class PayPalRecordsMapperBuilder extends MarketplaceTransactionsBuilder<R
     }
 
     @Override
-    public void initFromXml(Element root) throws IOException {
+    public void initFromXml(Element root) {
         super.initFromXml(root);
 
         String text = Util.readLastElement(root, "source-csv");

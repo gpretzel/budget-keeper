@@ -19,12 +19,12 @@
       <category>^SHOPPING$</category>
     </or>
   </matcher>
-  
+
   <pass id="test">
     <action>
       <matcher>
         <matcher ref="shopping"/>
-      </matcher>    
+      </matcher>
     </action>
     <action><discard/></action>
   </pass>
