@@ -7,9 +7,11 @@ import java.util.Objects;
 import java.util.stream.Stream;
 
 
-interface Statement extends ThrowingSupplier<Stream<Record>> {
-    String getId();
-    String getSystemId();
+public interface Statement extends ThrowingSupplier<Stream<Record>> {
+
+    public String getId();
+
+    public String getSystemId();
 
     static Statement fromStatementFile(String id, Path path, Currency currency,
             RecordsSupplier rs) {

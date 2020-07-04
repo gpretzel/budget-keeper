@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.UnaryOperator;
 import java.util.logging.LogManager;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -93,7 +94,7 @@ final class Main implements Callable<Integer> {
         Path[] filteredStatementPaths = explodePaths(statementPaths);
 
         statementCfg = rsfb.createFromXml(configXml);
-        RecordsMapper recordsMapper = mrpb.createFromXml(
+        UnaryOperator<Stream<Record>> recordsMapper = mrpb.createFromXml(
                 configXml.getDocumentElement());
 
         long totalRecords = -1;
@@ -122,6 +123,17 @@ final class Main implements Callable<Integer> {
                     Stream.of(filteredStatementPaths)
                             .map(StatementHarvestJob::new)
                             .collect(Collectors.toList()));
+            
+            statements.stream()
+                    .filter(Predicate.not(Future::isCancelled))
+                    .forEachOrdered(f -> {
+                        try {
+                            f.get();
+                        } catch (InterruptedException | ExecutionException ex) {
+                            ex.printStackTrace();
+                        }
+                    });
+            
             failed = statements.stream()
                     .filter(Predicate.not(Future::isCancelled))
                     .filter(f -> {
@@ -175,10 +187,8 @@ final class Main implements Callable<Integer> {
                 }
             }
 
-            records = recordsMapper
-                    .apply(records.stream())
-                    .collect(Collectors.toList());
-            recordsMapper.onRecordsProcessed();
+            records = recordsMapper.apply(records.stream()).collect(
+                    Collectors.toList());
 
             keptRecords = records.size();
 

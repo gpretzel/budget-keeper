@@ -20,6 +20,8 @@ import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -53,12 +55,46 @@ public final class MarketplaceTransactions<T> {
             return score;
         }
 
+        public BigDecimal getAmountDiff() {
+            return getAmount(key).subtract(getAmount(value));
+        }
+
+        public long getDayDiff() {
+            return ChronoUnit.DAYS.between(getDate(key), getDate(value));
+        }
+
+        public Set<String> getTags() {
+            Set<String> tags = null;
+            if (amountDiffTag != null) {
+                final BigDecimal amountDiff = getAmountDiff();
+                if (amountDiff.compareTo(BigDecimal.ZERO) != 0) {
+                    if (tags == null) {
+                        tags = new HashSet<>();
+                    }
+                    tags.add(amountDiffTag);
+                    tags.add(String.format("%s_%s", amountDiffTag,
+                            amountDiff.toPlainString()));
+                }
+            }
+
+            if (daysDiffTag != null) {
+                final long daysDiff = getDayDiff();
+                if (daysDiff != 0) {
+                    if (tags == null) {
+                        tags = new HashSet<>();
+                    }
+                    tags.add(daysDiffTag);
+                    tags.add(String.format("%s_%d", daysDiffTag, daysDiff));
+                }
+            }
+
+            return tags;
+        }
+
         @Override
         public String toString() {
-            final BigDecimal amountDiff = getAmount(key).subtract(getAmount(
-                    value));
-            final long daysDiff = ChronoUnit.DAYS.between(getDate(key), getDate(
-                    value));
+            final BigDecimal amountDiff = getAmountDiff();
+            final long daysDiff = getDayDiff();
 
             StringBuilder sb = new StringBuilder();
             if (amountDiff.compareTo(BigDecimal.ZERO) != 0) {
@@ -67,7 +103,7 @@ public final class MarketplaceTransactions<T> {
             if (daysDiff != 0) {
                 sb.append(String.format(" days-diff=%s;", daysDiff));
             }
-            return String.format("score=%d;%s key=%s; value=%s", score, sb, key,
+            return String.format("score=%d;%s key=[%s]; value=[%s]", score, sb, key,
                     value);
         }
 
@@ -76,7 +112,7 @@ public final class MarketplaceTransactions<T> {
         private final int score;
     };
 
-    public MarketplaceTransactions(Stream<T> transactions,
+    public MarketplaceTransactions(Stream<? extends T> transactions,
             Function<T, BigDecimal> getAmount, Function<T, Currency> getCurrency,
             Function<T, LocalDate> getDate) {
         this.getAmount = getAmount;
@@ -114,13 +150,33 @@ public final class MarketplaceTransactions<T> {
         return this;
     }
 
-    public Stream<Record> filterRecords(Stream<Record> records,
+    public MarketplaceTransactions<T> setAmountDiffTag(String v) {
+        amountDiffTag = v;
+        return this;
+    }
+
+    public MarketplaceTransactions<T> setDaysDiffTag(String v) {
+        daysDiffTag = v;
+        return this;
+    }
+    
+    public MarketplaceTransactions<T> setRecordFilter(Predicate<Record> v) {
+        recordFilter = v;
+        return this;
+    }
+
+    public Stream<Record> mapRecords(Stream<Record> records,
             Function<Match, Record> merger) {
         Map<T, List<Record>> mappedEntries = new HashMap<>();
         Map<Record, MatchInternal> matches = new LinkedHashMap<>();
 
         Consumer<Record> initializer = record -> {
-            MatchInternal match = findTransaction(record);
+            final MatchInternal match;
+            if (recordFilter == null || recordFilter.test(record)) {
+                match = findTransaction(record);
+            } else {
+                match = null;
+            }
             if (match != null) {
                 if (match.isFullMatch()) {
                     match.removeValue();
@@ -164,7 +220,51 @@ public final class MarketplaceTransactions<T> {
         });
     }
 
-    public Stream<T> getUnclaimedTransactions() {
+    public Record mapRecord(Match match, Function<T, String> newDescription,
+            Function<T, Set<String>> newTags, Logger logger) {
+        RecordBuilder rb = RecordBuilder.from(match.getKey());
+        rb.setDescription(newDescription.apply(match.getValue()));
+
+        StringBuilder logMsg = null;
+        if (logger.isLoggable(Level.INFO)) {
+            logMsg = new StringBuilder();
+            logMsg.append(String.format("Set [%s] description",
+                    rb.getDescription()));
+        }
+
+        Set<String> tags = Stream.of(newTags.apply(match.getValue()), match.getTags())
+                .filter(Objects::nonNull)
+                .flatMap(x -> x.stream())
+                .collect(Collectors.toSet());
+
+        if (tags != null) {
+            Set<String> oldTags = null;
+            if (logger.isLoggable(Level.INFO)) {
+                if (rb.getTags() != null) {
+                    oldTags = Set.of(rb.getTags());
+                } else {
+                    oldTags = Set.of();
+                }
+            }
+
+            tags.forEach(rb::addTag);
+
+            if (logger.isLoggable(Level.INFO)) {
+                Set<String> addedTags = new HashSet<>(Set.of(rb.getTags()));
+                addedTags.removeAll(oldTags);
+
+                if (!addedTags.isEmpty()) {
+                    logMsg.append(String.format("; add %s tags", addedTags));
+                }
+            }
+        }
+
+        logger.info(String.format("%s in [%s]", logMsg, match));
+
+        return rb.create();
+    }
+
+    public Stream<? extends T> getUnclaimedTransactions() {
         return orderedTransactions.stream();
     }
 
@@ -265,9 +365,12 @@ public final class MarketplaceTransactions<T> {
     private final Function<T, BigDecimal> getAmount;
     private final Function<T, LocalDate> getDate;
     private final Map<Currency, Transactions> transactionsMap;
-    private final Collection<T> orderedTransactions;
+    private final Collection<? extends T> orderedTransactions;
+    private Predicate<Record> recordFilter;
     private long maxDaysDiff;
     private double maxAmountDiff;
+    private String amountDiffTag;
+    private String daysDiffTag;
 
     private class Transactions {
         final List<T> amountSorted;

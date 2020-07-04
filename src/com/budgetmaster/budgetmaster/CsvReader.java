@@ -8,14 +8,18 @@ import java.nio.file.Path;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 
 
-public class CsvReader<T> {
+public final class CsvReader<T> {
     public CsvReader() {
         setFailFast(true);
     }
@@ -36,8 +40,11 @@ public class CsvReader<T> {
         };
 
         try (Reader in = Files.newBufferedReader(file)) {
-            Iterable<CSVRecord> records = csvParser.parse(in);
-            for (CSVRecord record : records) {
+            CSVParser parser = csvFormat.parse(in);
+            if (headerNamesConsumer != null) {
+                headerNamesConsumer.accept(parser.getHeaderNames());
+            }
+            for (CSVRecord record : parser) {
                 try {
                     result.add(conv.apply(record, reportError));
                 } catch (DateTimeParseException ex) {
@@ -53,8 +60,8 @@ public class CsvReader<T> {
         return result.stream();
     }
 
-    public CsvReader<T> setParser(CSVFormat v) {
-        csvParser = v;
+    public CsvReader<T> setFormat(CSVFormat v) {
+        csvFormat = v;
         return this;
     }
 
@@ -63,14 +70,31 @@ public class CsvReader<T> {
         return this;
     }
 
-    public CsvReader<T> setConv(
+    public CsvReader<T> setThrowingConv(
             ThrowingBiFunction<CSVRecord, BiConsumer<String, Exception>, T> v) {
-        conv = ThrowingBiFunction.toBiFunction(v);
+        setConv(ThrowingBiFunction.toBiFunction(v));
         return this;
     }
 
-    private CSVFormat csvParser;
+    public CsvReader<T> setConv(
+            BiFunction<CSVRecord, BiConsumer<String, Exception>, T> v) {
+        conv = v;
+        return this;
+    }
+
+    public CsvReader<T> setHeaderNamesConsumer(Consumer<List<String>> v) {
+        headerNamesConsumer = v;
+        return this;
+    }
+
+    public static String[] read(CSVRecord csvRecord) {
+        return StreamSupport.stream(csvRecord.spliterator(), false).toArray(
+                String[]::new);
+    }
+
+    private CSVFormat csvFormat;
     private BiFunction<CSVRecord, BiConsumer<String, Exception>, T> conv;
+    private Consumer<List<String>> headerNamesConsumer;
     private boolean failFast;
 
     private static class CsvReaderException extends RuntimeException {

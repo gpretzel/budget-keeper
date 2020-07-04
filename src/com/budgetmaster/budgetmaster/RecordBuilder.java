@@ -126,7 +126,7 @@ public final class RecordBuilder {
     }
 
     public RecordBuilder setAmount(String v) {
-        amount = MonetaryAmount.of(v);
+        amount = MonetaryAmount.of(v).getAmount();
         return this;
     }
 
@@ -207,5 +207,5 @@ public final class RecordBuilder {
         final BiConsumer<RecordBuilder, ?> method;
     };
 
-    private final static Pattern VALIDATE_TAG_PATTERN = Pattern.compile("^\\w+$");
+    private final static Pattern VALIDATE_TAG_PATTERN = Pattern.compile("^\\w[\\w_-[.]]*$");
 }

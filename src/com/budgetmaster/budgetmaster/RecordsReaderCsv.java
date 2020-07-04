@@ -29,7 +29,7 @@ final public class RecordsReaderCsv extends AccountStatementCsv {
     }
 
     @Override
-    protected CSVFormat initParser() {
+    protected CSVFormat initFormat() {
         String header[] = Stream.of(RecordsSerializer.csv().getOrderedFields())
                 .map(RecordsSerializer.Field::name)
                 .toArray(String[]::new);

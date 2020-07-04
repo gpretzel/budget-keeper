@@ -24,7 +24,7 @@ public final class TdBankCcStatementCsv extends AccountStatementCsv {
     }
 
     @Override
-    protected CSVFormat initParser() {
+    protected CSVFormat initFormat() {
         return CSVFormat.RFC4180.withFirstRecordAsHeader().withHeader(Headers.class);
     }
 

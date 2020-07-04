@@ -14,23 +14,27 @@
   </parser>
 
   <matcher id="DCU_CC">
-      <field name="Statement-id" regexp="DCU credit card statement"/>
+    <field name="Statement-id" regexp="DCU credit card statement"/>
   </matcher>
 
   <matcher id="TD_CC">
-      <field name="Statement-id" regexp="TD Bank credit card statement"/>
+    <field name="Statement-id" regexp="TD Bank credit card statement"/>
   </matcher>
 
   <matcher id="TD">
-      <field name="Statement-id" regexp="TD Bank account statement"/>
+    <field name="Statement-id" regexp="TD Bank account statement"/>
   </matcher>
 
   <matcher id="DCU">
-      <field name="Statement-id" regexp="DCU Bank account statement"/>
+    <field name="Statement-id" regexp="DCU Bank account statement"/>
   </matcher>
 
   <matcher id="final">
-      <tag>final</tag>
+    <tag>final</tag>
+  </matcher>
+  
+  <matcher id="amazone-prime">
+    <description>^(AMAZON PRIME AMZN.COM/BILLWA|AMAZONPRIME MEMBER AMZN.COM/PRMEWA)$</description>
   </matcher>
 
   <pass id="identity"/>
@@ -70,21 +74,14 @@
     <matcher>
       <description>\bPAYPAL\b</description>
     </matcher>
-    <date-diff-days>5</date-diff-days>
-    <amount-diff>0.1</amount-diff>
+    <diff-days>5</diff-days>
+    <diff-amount>0.1</diff-amount>
+    <diff-tag-days>diff_days</diff-tag-days>
+    <diff-tag-amount>diff_amount</diff-tag-amount>
     <source-csv>${PAYPAL_CSV}</source-csv>
     <source-csv>C:\Users\asemenyu\Downloads\$\paypal\paypal.csv</source-csv>
     <unclaimed-collector-csv>${PAYPAL_UNCLAIMED_CSV}</unclaimed-collector-csv>
     <unclaimed-collector-csv>--</unclaimed-collector-csv>
-  </pass>
-
-  <pass id="discard-matched-paypal-records">
-    <action>
-      <matcher>
-        <tag>paypal</tag>
-      </matcher>
-      <discard/>
-    </action>
   </pass>
 
   <pass class="com.budgetmaster.budgetmaster.amazon.AmazonRecordsMapperBuilder"
@@ -92,11 +89,36 @@
     <matcher>
       <description>\b(AMAZON|AMZN)\b</description>
     </matcher>
-    <date-diff-days>10</date-diff-days>
+    <tag>amazon</tag>
+    <diff-days>5</diff-days>
+    <!--
+      Catch various discounts: Amazon discount, Subscribe & Save, etc. 
+      They are not listed in Amazon CSVs.
+    -->
+    <diff-amount>0.1</diff-amount>
+    <diff-tag-days>diff_days</diff-tag-days>
+    <diff-tag-amount>diff_amount</diff-tag-amount>
+    <with-order-id-tag/>
     <orders-csv>${AMAZON_ORDERS_CSV}</orders-csv>
+    <orders-csv>C:\Users\asemenyu\Downloads\$\amazon\amazon-items-01-Jan-2017_to_23-May-2020.csv</orders-csv>
     <refunds-csv>${AMAZON_REFUNDS_CSV}</refunds-csv>
+    <refunds-csv>C:\Users\asemenyu\Downloads\$\amazon\amazon-refunds-01-Jan-2017_to_23-May-2020.csv</refunds-csv>
     <unclaimed-orders-collector-csv>${AMAZON_UNCLAIMED_ORDERS_CSV}</unclaimed-orders-collector-csv>
+    <unclaimed-orders-collector-csv>--</unclaimed-orders-collector-csv>
     <unclaimed-refunds-collector-csv>${AMAZON_UNCLAIMED_REFUNDS_CSV}</unclaimed-refunds-collector-csv>
+    <unclaimed-refunds-collector-csv>--</unclaimed-refunds-collector-csv>
+  </pass>
+  
+  <pass id="discard-matched-marketplace-records">
+    <action>
+      <matcher>
+        <tag>paypal</tag>
+      </matcher>
+      <matcher>
+        <tag>amazon</tag>
+      </matcher>
+      <discard/>
+    </action>
   </pass>
 
   <pass id="main">
@@ -244,9 +266,7 @@
     </action>
 
     <action>
-      <matcher>
-        <description>^AMAZON PRIME AMZN.COM/BILLWA$</description>
-      </matcher>
+      <matcher ref="amazone-prime"/>
       <tag>final</tag>
       <category>подписка</category>
       <description>За Амазон</description>

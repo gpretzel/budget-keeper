@@ -136,7 +136,8 @@ public final class DcuCcStatementPdf extends AccountStatementPdf {
         }
     }
 
-    private static BalanceChecksum createRecordChecksum(TextFrame text, String main, String other) {
+    private static BalanceChecksum createRecordChecksum(TextFrame text,
+            String main, String other) {
         final BigDecimal mainAmount = getChecksumValue(text, EOL + main);
 
         LOGGER.finest(String.format("%s amount: [%s]", main, mainAmount));
@@ -160,7 +161,7 @@ public final class DcuCcStatementPdf extends AccountStatementPdf {
 
     private static BigDecimal getChecksumValue(TextFrame text, String begin) {
         String checksumText = text.set(begin, EOL).getStrippedValue();
-        return MonetaryAmount.of(checksumText);
+        return MonetaryAmount.of(checksumText).getAmount();
     }
 
     @Override

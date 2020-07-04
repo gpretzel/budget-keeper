@@ -1,6 +1,7 @@
 package com.budgetmaster.budgetmaster;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -11,6 +12,7 @@ import java.util.function.Supplier;
 public class Functional {
     @FunctionalInterface
     public interface ThrowingConsumer<T> {
+
         void accept(T t) throws Exception;
 
         public static <T> Consumer<T> toConsumer(ThrowingConsumer<T> v) {
@@ -23,9 +25,27 @@ public class Functional {
             };
         }
     }
+    
+    @FunctionalInterface
+    public interface ThrowingBiConsumer<T, U> {
+
+        void accept(T t, U u) throws Exception;
+
+        public static <T, U> BiConsumer<T, U> toBiConsumer(
+                ThrowingBiConsumer<T, U> v) {
+            return (t, u) -> {
+                try {
+                    v.accept(t, u);
+                } catch (Exception ex) {
+                    rethrowUnchecked(ex);
+                }
+            };
+        }
+    }
 
     @FunctionalInterface
     public interface ThrowingSupplier<T> {
+
         T get() throws Exception;
 
         public static <T> Supplier<T> toSupplier(ThrowingSupplier<T> v) {
@@ -43,6 +63,7 @@ public class Functional {
 
     @FunctionalInterface
     public interface ThrowingFunction<T, R> {
+
         R apply(T t) throws Exception;
 
         public static <T, R> Function<T, R> toFunction(ThrowingFunction<T, R> v) {
@@ -59,10 +80,12 @@ public class Functional {
     }
 
     @FunctionalInterface
-    public interface ThrowingBiFunction<T,U, R> {
+    public interface ThrowingBiFunction<T, U, R> {
+
         R apply(T t, U u) throws Exception;
 
-        public static <T, U, R> BiFunction<T, U, R> toBiFunction(ThrowingBiFunction<T, U, R> v) {
+        public static <T, U, R> BiFunction<T, U, R> toBiFunction(
+                ThrowingBiFunction<T, U, R> v) {
             return (t, u) -> {
                 try {
                     return v.apply(t, u);
@@ -77,6 +100,7 @@ public class Functional {
 
     @FunctionalInterface
     public interface ThrowingRunnable {
+
         void run() throws Exception;
 
         public static Runnable toRunnable(ThrowingRunnable v) {
@@ -95,6 +119,10 @@ public class Functional {
     }
 
     public static <T> Consumer<T> identity(Consumer<T> v) {
+        return v;
+    }
+    
+    public static <T, U> BiConsumer<T, U> identity(BiConsumer<T, U> v) {
         return v;
     }
 

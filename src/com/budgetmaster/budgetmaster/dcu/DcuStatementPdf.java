@@ -37,18 +37,19 @@ public final class DcuStatementPdf extends AccountStatementPdf {
             try {
                 text.set("ACCT#", "BALANCE");
 
-                final String beginBalanceStr = text.set(EOL + "PREVIOUS BALANCE", EOL).getStrippedValue();
+                final String beginBalanceStr = text.set(EOL + "PREVIOUS BALANCE",
+                        EOL).getStrippedValue();
                 final BigDecimal beginBalance;
                 if (beginBalanceStr.isEmpty()) {
                     beginBalance = BigDecimal.ZERO;
                 } else {
-                    beginBalance = MonetaryAmount.of(beginBalanceStr).negate();
+                    beginBalance = MonetaryAmount.of(beginBalanceStr).getAmount().negate();
                 }
 
                 accountText = text.set(EOL, "NEW BALANCE").getStrippedValue();
 
                 final BigDecimal endBalance = MonetaryAmount.of(text.set(
-                        "NEW BALANCE", EOL).getStrippedValue()).negate();
+                        "NEW BALANCE", EOL).getStrippedValue()).getAmount().negate();
 
                 accountChecksum = new BalanceChecksum(endBalance.subtract(
                         beginBalance));

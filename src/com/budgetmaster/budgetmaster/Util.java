@@ -90,23 +90,34 @@ public final class Util {
         }
     }
 
-    public static String readLastElement(Element root, String elementName) {
+    public static NodeList queryNodes(String xpathExpr, Element el) {
         XPathFactory xpathfactory = XPathFactory.newInstance();
         XPath xpath = xpathfactory.newXPath();
-
+        
         try {
-            XPathExpression expr = xpath.compile(elementName + "[last()]/text()");
-            NodeList nodes = (NodeList) expr.evaluate(root, XPathConstants.NODESET);
-            if (nodes.getLength() != 0) {
-                return nodes.item(0).getNodeValue();
-            }
-            return null;
+            XPathExpression expr = xpath.compile(xpathExpr);
+            return (NodeList) expr.evaluate(el, XPathConstants.NODESET);
         } catch (XPathExpressionException ex) {
-            // Should never happen
             throw new RuntimeException(ex);
         }
     }
+    
+    public static String readLastElement(Element el, String elementName) {
+        NodeList nodes = queryNodes(elementName + "[last()]/text()", el);
+        if (nodes.getLength() != 0) {
+            return nodes.item(0).getNodeValue();
+        }
+        return null;
+    }
 
+    public static Path readLastElementAsPath(Element el, String elementName) {
+        String value = readLastElement(el, elementName);
+        if (value != null) {
+            return Path.of(value);
+        }
+        return null;
+    }
+    
     private static void validateEllipsisStringMaxLength(int v) {
         if (v < ELLIPSES.length()) {
             throw new IllegalArgumentException(String.format(

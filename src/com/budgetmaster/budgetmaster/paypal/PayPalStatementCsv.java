@@ -62,8 +62,8 @@ public final class PayPalStatementCsv extends AccountStatementCsv {
             
             LOGGER.finer(String.format("Redemption record: %s", record));
 
-            BigDecimal redemption = MonetaryAmount.of(record.get(Headers.Amount));
-            BigDecimal balance = MonetaryAmount.of(record.get(Headers.Balance));
+            BigDecimal redemption = MonetaryAmount.of(record.get(Headers.Amount)).getAmount();
+            BigDecimal balance = MonetaryAmount.of(record.get(Headers.Balance)).getAmount();
             BigDecimal amount = balance.subtract(redemption);
             
             rb.setAmount(amount);
@@ -80,7 +80,7 @@ public final class PayPalStatementCsv extends AccountStatementCsv {
     }
 
     @Override
-    protected CSVFormat initParser() {
+    protected CSVFormat initFormat() {
         return CSVFormat.RFC4180.withFirstRecordAsHeader().withHeader(Headers.class);
     }
     

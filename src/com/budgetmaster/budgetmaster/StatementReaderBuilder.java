@@ -1,5 +1,6 @@
 package com.budgetmaster.budgetmaster;
 
+import static com.budgetmaster.budgetmaster.Util.queryNodes;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.FileSystems;
@@ -10,13 +11,6 @@ import java.util.Currency;
 import java.util.List;
 import java.util.function.Function;
 import java.util.function.Predicate;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathConstants;
-import javax.xml.xpath.XPathExpression;
-import javax.xml.xpath.XPathExpressionException;
-import javax.xml.xpath.XPathFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
@@ -24,9 +18,6 @@ import org.w3c.dom.NodeList;
 
 public class StatementReaderBuilder {
     Function<Path, Statement> createFromXml(Document doc) throws IOException {
-        XPathFactory xpathfactory = XPathFactory.newInstance();
-        xpath = xpathfactory.newXPath();
-
         List<Function<Path, Statement>> parsers = new ArrayList<>();
 
         NodeList nodes = queryNodes("//parser", doc.getDocumentElement());
@@ -114,15 +105,4 @@ public class StatementReaderBuilder {
             throws IOException {
         return createFromXml(Util.readXml(xmlFile));
     }
-
-    private NodeList queryNodes(String xpathExpr, Element root) {
-        try {
-            XPathExpression expr = xpath.compile(xpathExpr);
-            return (NodeList) expr.evaluate(root, XPathConstants.NODESET);
-        } catch (XPathExpressionException ex) {
-            throw new RuntimeException(ex);
-        }
-    }
-
-    private XPath xpath;
 }

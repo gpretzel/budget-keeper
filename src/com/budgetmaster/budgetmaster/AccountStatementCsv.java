@@ -20,8 +20,8 @@ public abstract class AccountStatementCsv implements RecordsSupplier {
         final Map<RecordBuilder.Setter, Enum<?>> fieldMapper = fieldMapper();
 
         return new CsvReader<Record>()
-        .setParser(initParser())
-        .setConv((csvRecord, reportError) -> {
+        .setFormat(initFormat())
+        .setThrowingConv((csvRecord, reportError) -> {
             RecordBuilder rb = new RecordBuilder();
             for (var fieldEntry : fieldMapper.entrySet()) {
                 final String value = csvRecord.get(fieldEntry.getValue().name());
@@ -52,8 +52,10 @@ public abstract class AccountStatementCsv implements RecordsSupplier {
                     case Amount:
                         if (!value.isEmpty()) {
                             try {
-                                final BigDecimal amount = MonetaryAmount.of(value);
-                                setterHelper(fieldEntry.getKey().method, rb, amount);
+                                final BigDecimal amount = MonetaryAmount.of(
+                                        value).getAmount();
+                                setterHelper(fieldEntry.getKey().method, rb,
+                                        amount);
                             } catch (NumberFormatException ex) {
                                 reportError.accept(String.format(
                                         "parsing amount (%s) of", value), ex);
@@ -78,6 +80,9 @@ public abstract class AccountStatementCsv implements RecordsSupplier {
                             reportError.accept("reading", ex);
                         }
                 }
+                
+                rb.setId(String.format("#%d",
+                        csvRecord.getParser().getCurrentLineNumber() + 1));
             }
 
             customReadRecord(rb, csvRecord);
@@ -98,7 +103,7 @@ public abstract class AccountStatementCsv implements RecordsSupplier {
 
     protected abstract DateTimeFormatter recordDateTimeFormatter();
 
-    protected abstract CSVFormat initParser();
+    protected abstract CSVFormat initFormat();
 
     private static <T> void setterHelper(BiConsumer<RecordBuilder, ?> method,
             RecordBuilder rb, T value) {

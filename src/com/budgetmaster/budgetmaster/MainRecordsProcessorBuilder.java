@@ -1,6 +1,7 @@
 package com.budgetmaster.budgetmaster;
 
 import com.budgetmaster.budgetmaster.Functional.ThrowingSupplier;
+import static com.budgetmaster.budgetmaster.Util.queryNodes;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.LocalDate;
@@ -21,63 +22,17 @@ import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathConstants;
-import javax.xml.xpath.XPathExpression;
-import javax.xml.xpath.XPathExpressionException;
-import javax.xml.xpath.XPathFactory;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 
 
 final class MainRecordsProcessorBuilder {
-    RecordsMapper createFromXml(Element root) throws IOException {
-        XPathFactory xpathfactory = XPathFactory.newInstance();
-        xpath = xpathfactory.newXPath();
+    UnaryOperator<Stream<Record>> createFromXml(Element root) {
         globalMatchers = createNamedRecordMatchers(root);
-
-        final List<String> mapperIdsList;
-        if (mapperIds != null) {
-            mapperIdsList = List.of(mapperIds);
-        } else {
-            mapperIdsList = null;
-        }
 
         List<UnaryOperator<Stream<Record>>> mappers = new ArrayList<>();
 
-        NodeList nodes = queryNodes(Stream.of(PassType.values())
-                .map(PassType::xmlName)
-                .map(s -> "//" + s)
-                .collect(Collectors.joining("|")), root);
-        if (mapperIdsList != null) {
-            Collection<String> validIDs = new HashSet<>();
-            for (int i = 0; i < nodes.getLength(); i++) {
-                Element el = (Element) nodes.item(i);
-                if (el.hasAttribute("id")) {
-                    validIDs.add(el.getAttribute("id"));
-                }
-            }
-
-            Set<String> requestedIDs = new HashSet<>();
-            requestedIDs.addAll(mapperIdsList);
-            requestedIDs.removeAll(validIDs);
-            if (!requestedIDs.isEmpty()) {
-                throw new IllegalArgumentException(String.format(
-                        "Invalid action IDs: %s. Valid IDs: %s",
-                        requestedIDs, validIDs));
-            }
-        }
-
-        for (int i = 0; i < nodes.getLength(); i++) {
-            Element el = (Element) nodes.item(i);
-
-            if (mapperIdsList != null) {
-                if (!el.hasAttribute("id") || !mapperIdsList.contains(
-                        el.getAttribute("id"))) {
-                    continue;
-                }
-            }
-
+        getRecordsMapperElements(root).forEach(el -> {
             final String elName = el.getLocalName();
             if (elName.equals(PassType.Pass.xmlName())) {
                 final UnaryOperator<Stream<Record>> mapper;
@@ -108,8 +63,7 @@ final class MainRecordsProcessorBuilder {
                     UnaryOperator<Record> recordMapper = createRecordMappers(el);
                     mapper = (records) -> records
                             .filter(Objects::nonNull)
-                            .map(recordMapper)
-                            .filter(Objects::nonNull);
+                            .map(recordMapper);
                 }
                 mappers.add(mapper);
             } else if (elName.equals(PassType.FilterExcludings.xmlName())) {
@@ -127,27 +81,13 @@ final class MainRecordsProcessorBuilder {
                 mappers.add(records -> filter.apply(records.filter(
                         Objects::nonNull).filter(recordMatcher)));
             }
-        }
+        });
 
-        return new RecordsMapper() {
-            @Override
-            public Stream<Record> apply(Stream<Record> t) {
-                return data.apply(t);
-            }
-
-            @Override
-            public void onRecordsProcessed() {
-                mappers.stream()
-                        .filter(RecordsMapper.class::isInstance)
-                        .map(RecordsMapper.class::cast)
-                        .forEachOrdered(RecordsMapper::onRecordsProcessed);
-            }
-
-            private final UnaryOperator<Stream<Record>> data = fold(mappers, true);
-        };
+        return fold(mappers.stream().map(CollectingRecordsMapper::new).collect(
+                Collectors.toList()), true);
     }
 
-    RecordsMapper createFromXml(Path xmlFile) throws IOException {
+    UnaryOperator<Stream<Record>> createFromXml(Path xmlFile) throws IOException {
         return createFromXml(Util.readXml(xmlFile).getDocumentElement());
     }
 
@@ -173,6 +113,42 @@ final class MainRecordsProcessorBuilder {
     Stream<Record> getDiscardedRecords() {
         Objects.requireNonNull(discardedRecords);
         return discardedRecords.stream();
+    }
+
+    private List<Element> getRecordsMapperElements(Element root) {
+        NodeList nodes = queryNodes(Stream.of(PassType.values())
+                .map(PassType::xmlName)
+                .map(s -> "//" + s)
+                .collect(Collectors.joining("|")), root);
+
+        List<Element> result = new ArrayList<>();
+        if (mapperIds == null) {
+            for (int i = 0; i < nodes.getLength(); i++) {
+                result.add((Element) nodes.item(i));
+            }
+        } else {
+            Map<String, Element> elements = new HashMap<>();
+            for (int i = 0; i < nodes.getLength(); i++) {
+                Element el = (Element) nodes.item(i);
+                if (el.hasAttribute("id")) {
+                    elements.put(el.getAttribute("id"), el);
+                }
+            }
+
+            Set<String> requestedIDs = new HashSet<>(List.of(mapperIds));
+            requestedIDs.removeAll(elements.keySet());
+            if (!requestedIDs.isEmpty()) {
+                throw new IllegalArgumentException(String.format(
+                        "Invalid action IDs: %s. Valid IDs: %s",
+                        requestedIDs, elements.keySet()));
+            }
+
+            for (String id : mapperIds) {
+                result.add(elements.get(id));
+            }
+        }
+
+        return result;
     }
 
     private Map<String, Predicate<Record>> createNamedRecordMatchers(
@@ -421,16 +397,28 @@ final class MainRecordsProcessorBuilder {
         return foldPredicates(predicates, allMatch);
     }
 
-    private NodeList queryNodes(String xpathExpr, Element root) {
-        try {
-            XPathExpression expr = xpath.compile(xpathExpr);
-            return (NodeList) expr.evaluate(root, XPathConstants.NODESET);
-        } catch (XPathExpressionException ex) {
-            throw new RuntimeException(ex);
+    private final static class CollectingRecordsMapper implements UnaryOperator<Stream<Record>> {
+
+        CollectingRecordsMapper(UnaryOperator<Stream<Record>> mapper) {
+            this.mapper = mapper;
         }
+
+        @Override
+        public Stream<Record> apply(Stream<Record> t) {
+            try {
+                return mapper.apply(t)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList()).stream();
+            } finally {
+                if (mapper instanceof RecordsMapper) {
+                    ((RecordsMapper) mapper).onRecordsProcessed();
+                }
+            }
+        }
+
+        private final UnaryOperator<Stream<Record>> mapper;
     }
 
-    private XPath xpath;
     private Map<String, Predicate<Record>> globalMatchers;
     private List<Record> discardedRecords;
     private String[] mapperIds;
