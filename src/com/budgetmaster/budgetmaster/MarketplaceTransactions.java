@@ -1,7 +1,7 @@
 package com.budgetmaster.budgetmaster;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
+import java.math.MathContext;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -11,6 +11,7 @@ import java.util.Comparator;
 import java.util.Currency;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -28,11 +29,48 @@ import java.util.stream.Stream;
 
 public final class MarketplaceTransactions<T> {
     public final static int MAX_MATCH_SCORE = 1000;
-    public final static int MIN_MATCH_SCORE = 0;
+    public final static int MAX_BALANCE = 1000;
+    public final static int MAX_AMOUNT_DIFF = 1000;
+
+    public final static class IntRange implements Iterable<Integer> {
+        IntRange(int startInclusive, int endInclusive, int step) {
+            this.startInclusive = startInclusive;
+            this.endInclusive = endInclusive;
+            this.step = step;
+        }
+
+        @Override
+        public Iterator<Integer> iterator() {
+            return new Iterator<>() {
+                @Override
+                public boolean hasNext() {
+                    return !started || value != endInclusive;
+                }
+
+                @Override
+                public Integer next() {
+                    started = true;
+                    try {
+                        return value;
+                    } finally {
+                        value += step;
+                        if (value > endInclusive) {
+                            value = endInclusive;
+                        }
+                    }
+                }
+
+                private int value = startInclusive;
+                private boolean started;
+            };
+        }
+
+        private final int startInclusive, endInclusive, step;
+    }
 
     public final class Match {
         Match(int score, Record key, T value) {
-            if (score <= MIN_MATCH_SCORE) {
+            if (score <= 0) {
                 throw new IllegalArgumentException(String.format(
                         "Invalid match score=%d for key=%s and value=%s", score,
                         key, value));
@@ -138,15 +176,36 @@ public final class MarketplaceTransactions<T> {
             v.dateSorted.sort((x, y) -> getDate.apply(x).compareTo(
                     getDate.apply(y)));
         });
+
+        setMaxDaysRange(null);
+        setMaxAmountRange(null);
+        setBalanceRange(null);
     }
 
-    public MarketplaceTransactions<T> setMaxDaysDiff(long v) {
-        maxDaysDiff = v;
+    public MarketplaceTransactions<T> setMaxDaysRange(IntRange v) {
+        if (v == null) {
+            maxDaysRange = new IntRange(0, 0, 0);
+        } else {
+            maxDaysRange = v;
+        }
         return this;
     }
 
-    public MarketplaceTransactions<T> setMaxAmountDiff(double v) {
-        maxAmountDiff = v;
+    public MarketplaceTransactions<T> setMaxAmountRange(IntRange v) {
+        if (v == null) {
+            maxAmountRange = new IntRange(0, 0, 0);
+        } else {
+            maxAmountRange = v;
+        }
+        return this;
+    }
+
+    public MarketplaceTransactions<T> setBalanceRange(IntRange v) {
+        if (v == null) {
+            balanceRange = new IntRange(MAX_BALANCE / 2, MAX_BALANCE / 2, 0);
+        } else {
+            balanceRange = v;
+        }
         return this;
     }
 
@@ -159,7 +218,7 @@ public final class MarketplaceTransactions<T> {
         daysDiffTag = v;
         return this;
     }
-    
+
     public MarketplaceTransactions<T> setRecordFilter(Predicate<Record> v) {
         recordFilter = v;
         return this;
@@ -167,57 +226,53 @@ public final class MarketplaceTransactions<T> {
 
     public Stream<Record> mapRecords(Stream<Record> records,
             Function<Match, Record> merger) {
-        Map<T, List<Record>> mappedEntries = new HashMap<>();
-        Map<Record, MatchInternal> matches = new LinkedHashMap<>();
 
-        Consumer<Record> initializer = record -> {
-            final MatchInternal match;
-            if (recordFilter == null || recordFilter.test(record)) {
-                match = findTransaction(record);
-            } else {
-                match = null;
-            }
-            if (match != null) {
-                if (match.isFullMatch()) {
-                    match.removeValue();
-                } else {
-                    List<Record> mappedRecords = mappedEntries.get(match.getValue());
-                    if (mappedRecords == null) {
-                        mappedRecords = new ArrayList<>(List.of(record));
-                        mappedEntries.put(match.getValue(), mappedRecords);
+        final long transactionCount = orderedTransactions.size();
+
+        List<Record> srcRecords = records.collect(Collectors.toList());
+        Map<Record, MatchInternal> matches = null;
+        long matchesCount = 0;
+        Iteration bestIteration = null;
+        for (int maxDays : maxDaysRange) {
+            for (int maxAmount : maxAmountRange) {
+                for (int balance : balanceRange) {
+                    iteration = new Iteration(maxDays, maxAmount, balance);
+                    Map<Record, MatchInternal> newMatches = iteration.mapRecords(
+                            srcRecords.stream());
+                    long newMatchesCount = newMatches.values().stream().filter(
+                            Objects::nonNull).count();
+
+                    LOGGER.finer(String.format("%s; unmatched=%d", iteration,
+                            srcRecords.size() - newMatchesCount));
+
+                    if (newMatchesCount > matchesCount) {
+                        matchesCount = newMatchesCount;
+                        matches = newMatches;
+                        bestIteration = iteration;
                     }
                 }
             }
-            matches.put(record, match);
-        };
+        }
 
-        // Collect all matches.
-        records.forEachOrdered(initializer);
+        if (matches != null) {
+            int minScore = matches.values().stream()
+                    .filter(Objects::nonNull)
+                    .map(MatchInternal::getMatchScore)
+                    .min(Integer::compare).orElse(0);
+            LOGGER.finer(String.format("transactions=%d; matched=%d; unclaimed=%d; min_score=%d; %s",
+                transactionCount, transactionCount - orderedTransactions.size(),
+                orderedTransactions.size(), minScore, bestIteration));
 
-        // Resorve match collisions.
-        matches.values().forEach(match -> {
-            if (match != null && !match.isFullMatch()) {
-                List<Record> candidates = mappedEntries.get(match.getValue());
-                if (candidates != null) {
-                    Record bestMatch = Collections.max(candidates,
-                            (x, y) -> calculateMatchScore(match.getValue(), x)
-                            - calculateMatchScore(match.getValue(), y));
-                    match.removeValue();
-                    mappedEntries.remove(match.getValue());
-                    candidates.stream()
-                            .filter(Predicate.not(bestMatch::equals))
-                            .forEach(initializer);
+            // Apply matches.
+            return matches.entrySet().stream().map(e -> {
+                if (e.getValue() != null) {
+                    return merger.apply(e.getValue().createMatch(e.getKey()));
                 }
-            }
-        });
+                return e.getKey();
+            });
+        }
 
-        // Apply matches.
-        return matches.entrySet().stream().map(e -> {
-            if (e.getValue() != null) {
-                return merger.apply(e.getValue().createMatch(e.getKey()));
-            }
-            return e.getKey();
-        });
+        return srcRecords.stream();
     }
 
     public Record mapRecord(Match match, Function<T, String> newDescription,
@@ -278,30 +333,7 @@ public final class MarketplaceTransactions<T> {
     }
 
     private int calculateMatchScore(T a, Record b) {
-        BigDecimal aAmount = getAmount(a);
-        BigDecimal bAmount = getAmount(b);
-        BigDecimal amountDelta = aAmount.subtract(bAmount).abs();
-
-        final double amountMatchDiff = amountDelta.divide(aAmount.max(
-                bAmount), RoundingMode.HALF_UP).doubleValue();
-        if (amountMatchDiff > maxAmountDiff) {
-            return MIN_MATCH_SCORE;
-        }
-
-        final double amountMatchScore = 1.0 - amountMatchDiff;
-
-        final long daysDiff = Math.abs(ChronoUnit.DAYS.between(getDate(a),
-                getDate(b)));
-
-        if (daysDiff > maxDaysDiff) {
-            return MIN_MATCH_SCORE;
-        }
-
-        final double dateMatchScore = 1.0 - ((double) daysDiff) / (maxDaysDiff
-                + 1);
-
-        return (int) (MIN_MATCH_SCORE + amountMatchScore * dateMatchScore
-                * (MAX_MATCH_SCORE - MIN_MATCH_SCORE));
+        return iteration.calculateMatchScore(a, b);
     }
 
     private LocalDate getDate(Object o) {
@@ -367,10 +399,16 @@ public final class MarketplaceTransactions<T> {
     private final Map<Currency, Transactions> transactionsMap;
     private final Collection<? extends T> orderedTransactions;
     private Predicate<Record> recordFilter;
-    private long maxDaysDiff;
-    private double maxAmountDiff;
+    private Iteration iteration;
+    private IntRange maxDaysRange;
+    private IntRange maxAmountRange;
+    private IntRange balanceRange;
     private String amountDiffTag;
     private String daysDiffTag;
+
+    final static MathContext MC = MathContext.DECIMAL32;
+
+    private final static Logger LOGGER = LoggingRecordMapper.LOGGER;
 
     private class Transactions {
         final List<T> amountSorted;
@@ -398,10 +436,10 @@ public final class MarketplaceTransactions<T> {
 
         private int[] findAmountRange(Record key) {
             final BigDecimal theKey = getAmount(key);
-            final BigDecimal keyA = theKey.multiply(new BigDecimal(1.0
-                    - maxAmountDiff));
-            final BigDecimal keyB = theKey.multiply(new BigDecimal(1.0
-                    + maxAmountDiff));
+            final BigDecimal keyA = theKey.multiply(BigDecimal.ONE.subtract(
+                    iteration.maxAmountDiff, MC), MC);
+            final BigDecimal keyB = theKey.multiply(BigDecimal.ONE.add(
+                    iteration.maxAmountDiff, MC), MC);
             final BigDecimal leftKey, rightKey;
             if (theKey.compareTo(BigDecimal.ZERO) > 0) {
                 leftKey = keyA;
@@ -421,8 +459,8 @@ public final class MarketplaceTransactions<T> {
         private int[] findDateRange(Record key) {
             final LocalDate theKey = getDate(key);
             return findRange(
-                    theKey.minusDays(maxDaysDiff),
-                    theKey.plusDays(maxDaysDiff),
+                    theKey.minusDays(iteration.maxDaysDiff),
+                    theKey.plusDays(iteration.maxDaysDiff),
                     (x, y) -> getDate(x).compareTo(getDate(y)),
                     dateSorted);
         }
@@ -466,4 +504,122 @@ public final class MarketplaceTransactions<T> {
         private final int score;
         private Transactions transactions;
     };
+
+    private final class Iteration {
+        Iteration(int maxDaysDiff, int maxAmountDiff, int balance) {
+            if (maxAmountDiff > MAX_AMOUNT_DIFF) {
+                throw new IllegalArgumentException();
+            }
+
+            if (balance > MAX_BALANCE) {
+                throw new IllegalArgumentException();
+            }
+
+            this.maxDaysDiff = maxDaysDiff;
+            this.maxAmountDiff = new BigDecimal(maxAmountDiff).divide(
+                    new BigDecimal(MAX_AMOUNT_DIFF), MC);
+            this.balance = new BigDecimal(balance).divide(new BigDecimal(
+                    MAX_BALANCE), MC);
+        }
+
+        int calculateMatchScore(T a, Record b) {
+            BigDecimal aAmount = getAmount(a);
+            BigDecimal bAmount = getAmount(b);
+            BigDecimal amountDelta = aAmount.subtract(bAmount, MC).abs();
+
+            final BigDecimal amountMatchDiff = amountDelta.divide(aAmount.max(
+                    bAmount), MC);
+            if (amountMatchDiff.compareTo(maxAmountDiff) > 0) {
+                return 0;
+            }
+
+            final BigDecimal amountMatchScore = BigDecimal.ONE.subtract(
+                    amountMatchDiff, MC);
+
+            final long daysDiff = Math.abs(ChronoUnit.DAYS.between(getDate(a),
+                    getDate(b)));
+
+            if (daysDiff > maxDaysDiff) {
+                return 0;
+            }
+
+            final BigDecimal dateMatchScore = BigDecimal.ONE.subtract(
+                    new BigDecimal(daysDiff).divide(new BigDecimal(maxDaysDiff
+                            + 1), MC), MC);
+
+            final BigDecimal amountMatch = amountMatchScore.multiply(balance, MC);
+            final BigDecimal dateMatch = dateMatchScore.multiply(
+                    BigDecimal.ONE.subtract(balance, MC), MC);
+
+            final BigDecimal match = amountMatch.add(dateMatch);
+
+            return match.multiply(new BigDecimal(MAX_MATCH_SCORE), MC).intValue();
+        }
+
+        Map<Record, MatchInternal> mapRecords(Stream<Record> records) {
+            Map<T, List<Record>> mappedEntries = new HashMap<>();
+            Map<Record, MatchInternal> matches = new LinkedHashMap<>();
+
+            Consumer<Record> initializer = record -> {
+                final MatchInternal match;
+                if (recordFilter == null || recordFilter.test(record)) {
+                    match = findTransaction(record);
+                } else {
+                    match = null;
+                }
+                if (match != null) {
+                    if (match.isFullMatch()) {
+                        match.removeValue();
+                    } else {
+                        List<Record> mappedRecords = mappedEntries.get(
+                                match.getValue());
+                        if (mappedRecords == null) {
+                            mappedRecords = new ArrayList<>(List.of(record));
+                            mappedEntries.put(match.getValue(), mappedRecords);
+                        }
+                    }
+                }
+                matches.put(record, match);
+            };
+
+            // Collect all matches.
+            records.forEachOrdered(initializer);
+
+            List<Record> collisions = new ArrayList<>();
+            do {
+                // Resolve match collisions.
+                // Order matches by score. Start with the best match.
+                matches.values().stream()
+                        .filter(Objects::nonNull)
+                        .filter(Predicate.not(MatchInternal::isFullMatch))
+                        .sorted(Comparator.comparingInt(MatchInternal::getMatchScore).reversed())
+                        .forEachOrdered(match -> {
+                    List<Record> candidates = mappedEntries.get(match.getValue());
+                    if (candidates != null) {
+                        Record bestMatch = Collections.max(candidates,
+                                (x, y) -> calculateMatchScore(match.getValue(), x)
+                                - calculateMatchScore(match.getValue(), y));
+                        match.removeValue();
+                        mappedEntries.remove(match.getValue());
+                        candidates.stream()
+                                .filter(Predicate.not(bestMatch::equals))
+                                .forEachOrdered(collisions::add);
+                    }
+                });
+                collisions.forEach(initializer);
+            } while (!collisions.isEmpty());
+
+            return matches;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("amount-diff=%s; days-diff=%d; balance=%s",
+                    maxAmountDiff, maxDaysDiff, balance);
+        }
+
+        private final long maxDaysDiff;
+        private final BigDecimal maxAmountDiff;
+        private final BigDecimal balance;
+    }
 }

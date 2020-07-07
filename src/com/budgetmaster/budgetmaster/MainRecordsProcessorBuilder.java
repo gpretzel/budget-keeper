@@ -28,7 +28,7 @@ import org.w3c.dom.NodeList;
 
 final class MainRecordsProcessorBuilder {
     UnaryOperator<Stream<Record>> createFromXml(Element root) {
-        globalMatchers = createNamedRecordMatchers(root);
+        initNamedRecordMatchers(root);
 
         List<UnaryOperator<Stream<Record>>> mappers = new ArrayList<>();
 
@@ -66,9 +66,9 @@ final class MainRecordsProcessorBuilder {
                             .map(recordMapper);
                 }
                 mappers.add(mapper);
-            } else if (elName.equals(PassType.FilterExcludings.xmlName())) {
+            } else if (elName.equals(PassType.Ouroboros.xmlName())) {
                 Predicate<Record> recordMatcher = createRecordMatchers(el);
-                ExcludingRecordsFilter filter = new ExcludingRecordsFilter();
+                OuroborosRecordsFilter filter = new OuroborosRecordsFilter();
                 filter.negate(queryNodes("negate", el).getLength() != 0);
                 filter.refund(queryNodes("refund", el).getLength() != 0);
 
@@ -77,6 +77,12 @@ final class MainRecordsProcessorBuilder {
                     int periodDays = Integer.parseInt(periodDaysText);
                     filter.maxPeriodDays(periodDays);
                 }
+
+                mappers.add(records -> filter.apply(records.filter(
+                        Objects::nonNull).filter(recordMatcher)));
+            } else if (elName.equals(PassType.RemoveDuplicates.xmlName())) {
+                Predicate<Record> recordMatcher = createRecordMatchers(el);
+                DupRecordsFilter filter = new DupRecordsFilter();
 
                 mappers.add(records -> filter.apply(records.filter(
                         Objects::nonNull).filter(recordMatcher)));
@@ -151,17 +157,14 @@ final class MainRecordsProcessorBuilder {
         return result;
     }
 
-    private Map<String, Predicate<Record>> createNamedRecordMatchers(
-            Element root) {
-        Map<String, Predicate<Record>> result = new HashMap<>();
+    private void initNamedRecordMatchers(Element root) {
+        globalMatchers = new HashMap<>();
 
         NodeList nodes = queryNodes("/*/matcher[@id]", root);
         for (int i = 0; i < nodes.getLength(); i++) {
             Element el = (Element) nodes.item(i);
-            result.put(el.getAttribute("id"), createRecordMatcher(el));
+            globalMatchers.put(el.getAttribute("id"), createRecordMatcher(el));
         }
-
-        return result;
     }
 
     private static <T> UnaryOperator<T> fold(
@@ -445,7 +448,8 @@ final class MainRecordsProcessorBuilder {
 
     enum PassType {
         Pass,
-        FilterExcludings;
+        RemoveDuplicates,
+        Ouroboros;
 
         public String xmlName() {
             return String.join("-", name().split("(?=\\p{Lu})")).toLowerCase();

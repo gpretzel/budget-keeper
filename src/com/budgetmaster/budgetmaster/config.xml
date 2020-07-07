@@ -12,32 +12,51 @@
   <parser class="com.budgetmaster.budgetmaster.tdbank.TdBankStatementPdf" id="TD Bank account statement" currency="USD">
     <path-matcher>glob:**/tdbank/*.pdf</path-matcher>
   </parser>
+  <parser class="com.budgetmaster.budgetmaster.RecordsReaderCsv" id="Extracted data">
+    <path-matcher>glob:**/data/*.csv</path-matcher>
+  </parser>
 
   <matcher id="DCU_CC">
-    <field name="Statement-id" regexp="DCU credit card statement"/>
+    <statement-id>DCU credit card statement</statement-id>
   </matcher>
 
   <matcher id="TD_CC">
-    <field name="Statement-id" regexp="TD Bank credit card statement"/>
+    <statement-id>TD Bank credit card statement</statement-id>
   </matcher>
 
   <matcher id="TD">
-    <field name="Statement-id" regexp="TD Bank account statement"/>
+    <statement-id>TD Bank account statement</statement-id>
   </matcher>
 
   <matcher id="DCU">
-    <field name="Statement-id" regexp="DCU Bank account statement"/>
+    <statement-id>DCU Bank account statement</statement-id>
   </matcher>
 
   <matcher id="final">
     <tag>final</tag>
   </matcher>
-  
+
   <matcher id="amazone-prime">
-    <description>^(AMAZON PRIME AMZN.COM/BILLWA|AMAZONPRIME MEMBER AMZN.COM/PRMEWA)$</description>
+    <description>^(AMAZON PRIME.*AMZN.COM/BILLWA|AMAZONPRIME MEMBER AMZN.COM/PRMEWA)$</description>
+  </matcher>
+
+  <matcher id="all-paypal">
+    <description>\bPAYPAL\b</description>
+  </matcher>
+
+  <matcher id="all-amazon">
+    <description>\b(AMAZON|AMZN|Amazon)\b</description>
+    <not><matcher ref="amazone-prime"/></not>
   </matcher>
 
   <pass id="identity"/>
+
+  <pass id="discard-all">
+    <action>
+      <tag>discarded</tag>
+      <discard/>
+    </action>
+  </pass>
 
   <pass id="discards">
     <action>
@@ -69,12 +88,51 @@
     </action>
   </pass>
 
+  <pass id="discard-atm-cash">
+    <action>
+      <matcher>
+        <matcher ref="DCU"/>
+        <description>^WITHDRAWAL$</description>
+      </matcher>
+      <matcher>
+        <matcher ref="DCU"/>
+        <description>^ATM Surcharge Refund ATM Surcharge Re$</description>
+      </matcher>
+      <tag>atm</tag>
+      <discard/>
+    </action>
+  </pass>
+
+  <pass id="discard-ria">
+    <action>
+      <matcher>
+        <matcher ref="DCU"/>
+        <description>^EFT ACH RIAMONEYTRANSFERCUST|RIAMONEYTRANSFER\b</description>
+      </matcher>
+      <tag>ria</tag>
+      <discard/>
+    </action>
+  </pass>
+  
+  <pass id="discard-outlet">
+    <action>
+      <matcher>
+        <description>^WAL-MART|WALMART|TARGET|MARSHALLS|WM SUPERCENTER|MICHAELS|MACYS|DSW\b</description>
+      </matcher>
+      <tag>outlet</tag>
+      <discard/>
+    </action>
+  </pass>
+
   <pass class="com.budgetmaster.budgetmaster.paypal.PayPalRecordsMapperBuilder"
         id="merge-with-paypal">
-    <matcher>
-      <description>\bPAYPAL\b</description>
-    </matcher>
+    <matcher ref="all-paypal"/>
     <diff-days>5</diff-days>
+    <!--
+      Allow not exact amount match because of the cases like:
+      "01/18/2018","15:59:30","PST","Discount Marine Supplies.com","Website Payment","Completed","USD","-92.40","","-91.45"
+      "01/18/2018","15:59:30","PST","","General Credit Card Deposit","Completed","USD","91.45","","0.00"
+    -->
     <diff-amount>0.1</diff-amount>
     <diff-tag-days>diff_days</diff-tag-days>
     <diff-tag-amount>diff_amount</diff-tag-amount>
@@ -86,16 +144,18 @@
 
   <pass class="com.budgetmaster.budgetmaster.amazon.AmazonRecordsMapperBuilder"
         id="merge-with-amazon">
-    <matcher>
-      <description>\b(AMAZON|AMZN)\b</description>
-    </matcher>
+    <matcher ref="all-amazon"/>
     <tag>amazon</tag>
-    <diff-days>5</diff-days>
+
+    <diff-days from="1" to="10"></diff-days>
+    <balance from="0.5" to="0.8" step="0.05"></balance>
+
     <!--
-      Catch various discounts: Amazon discount, Subscribe & Save, etc. 
+      Catch various discounts: Amazon discount, Subscribe & Save, etc.
       They are not listed in Amazon CSVs.
     -->
     <diff-amount>0.1</diff-amount>
+
     <diff-tag-days>diff_days</diff-tag-days>
     <diff-tag-amount>diff_amount</diff-tag-amount>
     <with-order-id-tag/>
@@ -108,15 +168,34 @@
     <unclaimed-refunds-collector-csv>${AMAZON_UNCLAIMED_REFUNDS_CSV}</unclaimed-refunds-collector-csv>
     <unclaimed-refunds-collector-csv>--</unclaimed-refunds-collector-csv>
   </pass>
-  
-  <pass id="discard-matched-marketplace-records">
+
+  <pass id="discard-matched-records">
     <action>
       <matcher>
-        <tag>paypal</tag>
+        <or>
+          <tag>paypal</tag>
+          <tag>amazon</tag>
+        </or>
       </matcher>
+      <discard/>
+    </action>
+  </pass>
+
+  <pass id="discard-processed-records">
+    <action>
       <matcher>
-        <tag>amazon</tag>
+        <or>
+          <tag>final</tag>
+          <tag>paypal</tag>
+          <tag>amazon</tag>
+          <tag>atm</tag>
+          <tag>ria</tag>
+          <tag>outlet</tag>
+          <tag>discarded</tag>
+        </or>
       </matcher>
+      <matcher ref="all-paypal"/>
+      <matcher ref="all-amazon"/>
       <discard/>
     </action>
   </pass>
@@ -127,10 +206,7 @@
         <description>^GULF\s+OIL\b</description>
       </matcher>
       <matcher>
-        <description>^SPEEDWAY\b</description>
-      </matcher>
-      <matcher>
-        <description>^SHELL OIL\b</description>
+        <description>^SPEEDWAY|EXXONMOBIL|SHELL OIL|SUNOCO\b</description>
       </matcher>
       <matcher>
         <matcher ref="TD_CC"/>
@@ -159,12 +235,77 @@
 
     <action>
       <matcher>
+        <description>^SOMERVILLEMA PARKT\b</description>
+      </matcher>
+      <tag>final</tag>
+      <category>цивик</category>
+      <description>Штраф за парковку</description>
+    </action>
+    
+    <action>
+      <matcher>
+        <description>\bVALVOLINE|VIOC\b</description>
+      </matcher>
+      <tag>final</tag>
+      <category>цивик</category>
+      <description>Сервис</description>
+    </action>
+
+    <action>
+      <matcher>
+        <description>^THE HOME DEPOT|ACE HARDWARE\b</description>
+      </matcher>
+      <tag>final</tag>
+      <category>обустройство</category>
+    </action>
+    
+    <action>
+      <matcher>
+        <matcher ref="DCU_CC"/>
+        <description>^SOMERVILLE FAMILY SOMERVILLE MA$</description>
+      </matcher>
+      <matcher>
+        <matcher ref="TD_CC"/>
+        <description>^SOMERVILLE FAMILY DENTAL$</description>
+      </matcher>
+      <tag>final</tag>
+      <category>лечение</category>
+      <description>зубы</description>
+    </action>
+
+    <action>
+      <matcher>
+        <description>^Kindle\b</description>
+      </matcher>
+      <tag>final</tag>
+      <category>книжки</category>
+    </action>
+
+    <action>
+      <matcher>
+        <description>\bPARKING\b</description>
+      </matcher>
+      <tag>final</tag>
+      <category>парковка</category>
+    </action>
+
+    <action>
+      <matcher>
         <matcher ref="DCU"/>
         <description>^PAYMENT SHR TRANSFER FROM/TO 142$</description>
       </matcher>
       <tag>final</tag>
       <category>цивик</category>
       <description>Кредит за цивик</description>
+    </action>
+
+    <action>
+      <matcher>
+        <description>^AAA MSHIP\b</description>
+      </matcher>
+      <tag>final</tag>
+      <category>цивик</category>
+      <description>AAA</description>
     </action>
 
     <action>
@@ -178,7 +319,7 @@
 
     <action>
       <matcher>
-        <description><![CDATA[\b(STAR MARKET|TRADER JOE'S|STOP & SHOP|A RUSSO & SONS|ARAX MARKET|NEW DEAL FISH MARKET)\b]]></description>
+        <description><![CDATA[\bSTAR MARKET|TRADER JOE'S|STOP & SHOP|A RUSSO & SONS|ARAX MARKET|NEW DEAL FISH|THE FISHMONGER|MARKET BASKET|WHOLEFDS\b]]></description>
       </matcher>
       <tag>final</tag>
       <category>еда в магазине</category>
@@ -186,7 +327,7 @@
 
     <action>
       <matcher>
-        <description>\bUBER|MBTA|LYFT|Lyft|Uber\b</description>
+        <description>\bUBER|MBTA|LYFT|Lyft|Uber|TAXI\b</description>
       </matcher>
       <tag>final</tag>
       <category>такси</category>
@@ -211,7 +352,7 @@
 
     <action>
       <matcher>
-        <description>\bWINE\b</description>
+        <description>\bWINE|LIQUOR|LIQUORS\b</description>
       </matcher>
       <tag>final</tag>
       <category>алкоголь</category>
@@ -223,6 +364,9 @@
       </matcher>
       <matcher>
         <description>^VESTA \*T-MOBILE 888-278-3397 OR$</description>
+      </matcher>
+      <matcher>
+        <description>^VERIZON\b</description>
       </matcher>
       <tag>final</tag>
       <category>мобилка</category>
@@ -239,7 +383,16 @@
 
     <action>
       <matcher>
-        <description>^SQ *FORTISSIMO COF SOMERVILLE MA$</description>
+        <description>^SICHUAN GOURMET BURLINGTON MA\b</description>
+      </matcher>
+      <tag>final</tag>
+      <category>покушал</category>
+      <description>В китайском месте с коллегами в Барлингтоне</description>
+    </action>
+
+    <action>
+      <matcher>
+        <description>\bFORTISSIMO\b</description>
       </matcher>
       <tag>final</tag>
       <category>покушал</category>
@@ -274,27 +427,50 @@
 
     <action>
       <matcher>
-        <matcher ref="TD"/>
         <description>\bORACLE AMERICA SALARY\b</description>
       </matcher>
       <tag>final</tag>
       <category>доход</category>
       <description>Зарплата</description>
     </action>
+    
+    <action>
+      <matcher>
+        <description>\bMASS. MASTTAXRFD|IRS TREAS 310 TAX REF\b</description>
+      </matcher>
+      <tag>final</tag>
+      <category>доход</category>
+      <description>Возврат налогов</description>
+    </action>
 
     <action>
       <matcher>
         <matcher ref="DCU"/>
-        <description>^DIVIDEND$</description>
+        <description>^DIVIDEND|LOAN PMT RESIDUAL TO SHRS FROM/TO 141$</description>
       </matcher>
       <tag>final</tag>
       <category>доход</category>
       <description>Проценты по сберегательному счету DCU</description>
     </action>
+    
+    <action>
+      <matcher>
+        <matcher ref="DCU"/>
+        <description>^HR batch credits VisaCashBack\b</description>
+      </matcher>
+      <matcher>
+        <matcher ref="TD_CC"/>
+        <description>^Rewards Statement Credit\b</description>
+      </matcher>
+      
+      <tag>final</tag>
+      <category>доход</category>
+      <description>cashback</description>
+    </action>
 
     <action>
       <matcher>
-        <description>^(WEST MARINE|INTENSITYSAILS|NAUTOS-USA LLC|Vela Sailing Supply|West Coast Sailing|Discount Marine Supplies)\b</description>
+        <description>^(WEST MARINE|ANNAPOLIS PERFORMA|ANNAPOLIS PERFORMANCE|INTENSITY SAILS|INTENSITYSAILS|NAUTOS-USA LLC|VELASAILING|Vela Sailing Supply|West Coast Sailing|Discount Marine Supplies)\b</description>
       </matcher>
       <tag>final</tag>
       <category>яхтинг</category>
@@ -322,7 +498,7 @@
 
     <action>
       <matcher>
-        <description>^REGATTA NETWORK$\b</description>
+        <description>^REGATTA NETWORK\b</description>
       </matcher>
       <tag>final</tag>
       <category>яхтинг</category>
@@ -340,36 +516,22 @@
 
   </pass>
 
-  <matcher id="shopping">
-    <or>
-      <description>\b(AMAZON|AMZN)\b</description>
-      <category>^SHOPPING$</category>
-    </or>
-  </matcher>
+  <remove-duplicates id="remove-duplicates"/>
 
-  <filter-excludings id="filter-excludings">
+  <ouroboros id="ouroboros">
     <matcher>
-      <matcher ref="shopping"/>
-      <not><matcher ref="final"/></not>
+      <not><description>\bORACLE AMERICA SALARY|PARKING METERS|WITHDRAWAL\b</description></not>
+      <not><matcher ref="all-amazon"/></not>
+      <not><matcher ref="all-paypal"/></not>
     </matcher>
+    <matcher>
+      <description>\bWITHDRAWAL OVERDRAFT\b</description>
+    </matcher>
+    
     <!--
       Maximum distance between two matching transactions in days.
     -->
     <period-days>100</period-days>
-    <!--
-      The first of matching transactions should be adding to the balance.
-      The second of matching transactions should be removing from the balance.
-    -->
-    <refund/>
-    <negate/>
-  </filter-excludings>
-
-  <filter-excludings id="filter-excludings-2">
-    <matcher>
-      <not><matcher ref="shopping"/></not>
-      <not><matcher ref="final"/></not>
-    </matcher>
-    <negate/>
-  </filter-excludings>
+  </ouroboros>
 
 </config>

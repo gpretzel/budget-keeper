@@ -23,6 +23,9 @@ public abstract class AccountStatementCsv implements RecordsSupplier {
         .setFormat(initFormat())
         .setThrowingConv((csvRecord, reportError) -> {
             RecordBuilder rb = new RecordBuilder();
+            rb.setId(String.format("#%d",
+                    csvRecord.getParser().getCurrentLineNumber() + 1));
+
             for (var fieldEntry : fieldMapper.entrySet()) {
                 final String value = csvRecord.get(fieldEntry.getValue().name());
                 switch (fieldEntry.getKey()) {
@@ -64,12 +67,14 @@ public abstract class AccountStatementCsv implements RecordsSupplier {
                         break;
 
                     case Tags:
-                        try {
-                            final String[] tags = Util.splitAtWhitespace(value);
-                            setterHelper(fieldEntry.getKey().method, rb, tags);
-                        } catch (IllegalArgumentException ex) {
-                            reportError.accept(String.format(
-                                    "parsing tags (%s) of", value), ex);
+                        if (!value.isBlank()) {
+                            try {
+                                final String[] tags = Util.splitAtWhitespace(value);
+                                setterHelper(fieldEntry.getKey().method, rb, tags);
+                            } catch (IllegalArgumentException ex) {
+                                reportError.accept(String.format(
+                                        "parsing tags (%s) of", value), ex);
+                            }
                         }
                         break;
 
@@ -80,9 +85,6 @@ public abstract class AccountStatementCsv implements RecordsSupplier {
                             reportError.accept("reading", ex);
                         }
                 }
-                
-                rb.setId(String.format("#%d",
-                        csvRecord.getParser().getCurrentLineNumber() + 1));
             }
 
             customReadRecord(rb, csvRecord);

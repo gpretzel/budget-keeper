@@ -24,6 +24,10 @@ public final class Record {
     public String getId() {
         return id;
     }
+    
+    public String getGlobalId() {
+        return String.format("%s-%s", source.getSystemId(), getId());
+    }
 
     public String[] getTags() {
         return tags;

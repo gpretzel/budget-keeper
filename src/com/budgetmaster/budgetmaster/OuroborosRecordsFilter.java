@@ -1,6 +1,5 @@
 package com.budgetmaster.budgetmaster;
 
-import java.math.BigDecimal;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -14,19 +13,19 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 
-final class ExcludingRecordsFilter implements UnaryOperator<Stream<Record>> {
+final class OuroborosRecordsFilter implements UnaryOperator<Stream<Record>> {
 
-    public ExcludingRecordsFilter negate(boolean v) {
+    public OuroborosRecordsFilter negate(boolean v) {
         negate = v;
         return this;
     }
 
-    public ExcludingRecordsFilter maxPeriodDays(int v) {
+    public OuroborosRecordsFilter maxPeriodDays(int v) {
         maxPeriodDays = v;
         return this;
     }
 
-    public ExcludingRecordsFilter refund(boolean v) {
+    public OuroborosRecordsFilter refund(boolean v) {
         refund = v;
         return this;
     }

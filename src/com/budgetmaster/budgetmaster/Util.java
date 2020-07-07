@@ -82,9 +82,11 @@ public final class Util {
 
     public static void saveToCsvFile(Path path, Stream<Record> records) throws
             IOException {
-        RecordsSerializer serializer = RecordsSerializer.csv().withCsvHeader();
+        CsvRecordsSerializer serializer = new CsvRecordsSerializer();
         if ("--".equals(path.toString())) {
-            serializer.saveToStream(records, System.out);
+            StringBuilder sb = new StringBuilder();
+            serializer.saveToStream(records, sb);
+            System.out.append(sb.toString());            
         } else {
             serializer.saveToFile(records, path);
         }

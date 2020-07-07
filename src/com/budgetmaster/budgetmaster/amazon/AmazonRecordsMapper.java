@@ -11,6 +11,7 @@ import com.budgetmaster.budgetmaster.amazon.AmazonRecord.CsvOrderHeaders;
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Currency;
 import java.util.HashSet;
 import java.util.List;
@@ -48,41 +49,46 @@ final class AmazonRecordsMapper implements RecordsMapper {
                     .collect(Collectors.toSet())::contains;
         }
         
-        List.of(
-                Map.entry(rawOrders, unclaimedOrdersCsvFile), 
-                Map.entry(rawRefunds, unclaimedRefundsCsvFile)
-        ).forEach(ThrowingConsumer.toConsumer(e -> {
-            Path outputCsvFile = e.getValue();
-            if (outputCsvFile != null) {
-                e.getKey().save(outputCsvFile, filter);
-            }
+        List<Map.Entry<AmazonRawRecords, Path>> outputCfg = new ArrayList<>();
+        if (unclaimedOrdersCsvFile != null) {
+            outputCfg.add(Map.entry(rawOrders, unclaimedOrdersCsvFile));
+        }
+        if (unclaimedRefundsCsvFile != null) {
+            outputCfg.add(Map.entry(rawRefunds, unclaimedRefundsCsvFile));
+        }
+        outputCfg.forEach(ThrowingConsumer.toConsumer(e -> {
+            e.getKey().save(e.getValue(), filter);
         }));        
     }
 
     @Override
     public Stream<Record> apply(Stream<Record> records) {
         // Group orders by order ID and create grouped orders.
-        transactions = createTransactions(rawOrders.getData().map(
+        Map<String, LinkedRecord> groupOrders = rawOrders.getData().map(
                 this::createOrder).collect(Collectors.groupingBy(
-                        AmazonRecord::getOrderId)).values().stream().map(
-                        this::createOrder));
+                        AmazonRecord::getOrderId)).entrySet().stream().filter(
+                        e -> e.getValue().size() > 1).collect(Collectors.toMap(
+                        Map.Entry::getKey, e -> createOrder(e.getValue())));
+        
+        transactions = createTransactions(groupOrders.values().stream());
         
         Set<Record> matchedRecords = new HashSet<>();
         
         // Run pass #1 on grouped orders.
-        var newRecords = apply(records, transactions, record -> {
+        var newRecords = apply(records, record -> {
             synchronized(matchedRecords) {
                 matchedRecords.add(record);
             }
         }).collect(Collectors.toList());
 
-        Set<String> retryOrderIDs = transactions.getUnclaimedTransactions().map(
-                AmazonRecord::getOrderId).collect(Collectors.toSet());
+        transactions.getUnclaimedTransactions()
+                .map(AmazonRecord::getOrderId)
+                .forEachOrdered(groupOrders::remove);
         
         // Orders.
         var linkedOrders = rawOrders.getData()
                 .map(this::createOrder)
-                .filter(o -> retryOrderIDs.contains(o.getOrderId()));
+                .filter(o -> !groupOrders.containsKey(o.getOrderId()));
 
         // Refunds.
         var linkedRefunds = rawRefunds.getData().map(this::createRefund);
@@ -90,18 +96,16 @@ final class AmazonRecordsMapper implements RecordsMapper {
         // Run pass #2 on orders and refunds.
         transactions = createTransactions(
                 Stream.of(linkedOrders, linkedRefunds).flatMap(x -> x));
-        transactions.setRecordFilter(Predicate.not(matchedRecords::contains));
+        if (!matchedRecords.isEmpty()) {
+            transactions.setRecordFilter(Predicate.not(matchedRecords::contains));
+        }
         
-        return apply(newRecords.stream(), transactions, null);
+        return apply(newRecords.stream(), null);
     }
     
     private Stream<Record> apply(Stream<Record> records,
-            MarketplaceTransactions<LinkedRecord> transactions,
             Consumer<Record> matchedRecordConsumer) {
         return transactions.mapRecords(records, match -> {
-            if (matchedRecordConsumer != null) {
-                matchedRecordConsumer.accept(match.getKey());
-            }
             final Set<String> addTags;
             if (addOrderIdTag) {
                 addTags = new HashSet<>(tags);
@@ -109,8 +113,15 @@ final class AmazonRecordsMapper implements RecordsMapper {
             } else {
                 addTags = tags;
             }
-            return transactions.mapRecord(match, AmazonRecord::getTitle,
+            
+            Record result = transactions.mapRecord(match, AmazonRecord::getTitle,
                     v -> addTags, LOGGER);
+            
+            if (matchedRecordConsumer != null) {
+                matchedRecordConsumer.accept(result);
+            }
+            
+            return result;
         });
     }
 
@@ -169,9 +180,6 @@ final class AmazonRecordsMapper implements RecordsMapper {
     }
 
     private LinkedRecord createOrder(List<LinkedRecord> orders) {
-        if (orders.size() == 1) {
-            return orders.get(0);
-        }
         return createRecord(AmazonRecord.order(orders), null,
                 orders.get(0).getCurrency());
     }
